@@ -1,0 +1,24 @@
+# Overlay for OIDC lab: host networking so JWT iss http://127.0.0.1:5556/dex
+# matches JWKS fetches from both CLI (host) and gateway.
+#
+#   docker compose -f quarshell-gateway/compose/docker-compose.yml \
+#     -f quarshell-gateway/compose/docker-compose.oidc.yml --profile oidc up -d --build
+
+services:
+  quarshell-gateway:
+    network_mode: host
+    networks: !reset null
+    ports: []
+    environment:
+      OPENSHELL_OIDC_ISSUER: ${OPENSHELL_OIDC_ISSUER:-http://127.0.0.1:5556/dex}
+      OPENSHELL_OIDC_AUDIENCE: ${OPENSHELL_OIDC_AUDIENCE:-quarshell-cli}
+      OPENSHELL_OIDC_DANGEROUSLY_ALLOW_INSECURE_HTTP: ${OPENSHELL_OIDC_DANGEROUSLY_ALLOW_INSECURE_HTTP:-true}
+
+  quarshell-ui:
+    environment:
+      QUARSHELL_GATEWAY_UPSTREAM: ${QUARSHELL_GATEWAY_UPSTREAM:-host.docker.internal:${QUARSHELL_GATEWAY_PORT:-7443}}
+
+  dex:
+    network_mode: host
+    networks: !reset null
+    ports: []

@@ -1,0 +1,82 @@
+# Values for packaging/helm/quarshell — gateway control plane.
+# Sandbox pods remain driver-created; this chart deploys the gateway + RBAC/PVC.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/klorq/quarshell/gateway
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 7443
+
+persistence:
+  enabled: true
+  size: 1Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+# Optional PostgreSQL registry backend. The Secret value is never copied into
+# chart manifests; it is passed to Gateway as OPENSHELL_DB_URL.
+database:
+  existingSecret: ""
+  uriKey: uri
+
+# Pin secrets KEK via existing Secret (recommended).
+secrets:
+  # create: kubectl create secret generic quarshell-gateway-kek --from-literal=QUARSHELL_SECRETS_KEK=…
+  existingSecret: ""
+  kekKey: QUARSHELL_SECRETS_KEK
+
+oidc:
+  enabled: false
+  issuer: ""
+  audience: ""
+  allowInsecureHTTP: false
+  jwksAllowedOrigins: []
+
+serviceAccount:
+  create: true
+  name: ""
+
+networkPolicy:
+  enabled: false
+  # allow sandbox namespace to reach gateway
+  sandboxNamespace: quarshell-sandboxes
+
+ingress:
+  enabled: false
+  className: ""
+  hosts:
+    - host: quarshell-gateway.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 512Mi
+
+# Supervisor injection into sandbox pods (driver-owned; documented for operators).
+supervisor:
+  topology: combined
+  sideloadMethod: ""
+  image:
+    repository: ghcr.io/klorq/quarshell/supervisor
+    tag: ""
+    pullPolicy: IfNotPresent
+
+gpu:
+  resourceName: nvidia.com/gpu
+  defaultCount: 1
+
+sandbox:
+  namespace: quarshell-sandboxes
+  image: ghcr.io/klorq/quarshell/sandboxes/base:latest
+  createNamespace: true
