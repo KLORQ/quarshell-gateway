@@ -5,16 +5,20 @@ go 1.27.0
 toolchain go1.27.3
 
 require (
-	github.com/KLORQ/quarshell-core v0.5.0
-	github.com/KLORQ/quarshell-driver v0.2.0
-	github.com/KLORQ/quarshell-driver-vm v0.1.4
-	github.com/KLORQ/quarshell-policy v0.2.0
-	github.com/KLORQ/quarshell-proto v0.2.3
+	github.com/KLORQ/quarshell-core v0.5.1
+	github.com/KLORQ/quarshell-driver v0.2.2
+	github.com/KLORQ/quarshell-driver-vm v0.1.5
+	github.com/KLORQ/quarshell-policy v0.2.1
+	github.com/KLORQ/quarshell-proto v0.2.4
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/pelletier/go-toml/v2 v2.4.3
+	github.com/spiffe/go-spiffe/v2 v2.9.0
 	golang.org/x/sys v0.49.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
+	k8s.io/api v0.37.1
+	k8s.io/apimachinery v0.37.1
+	k8s.io/client-go v0.37.1
 	modernc.org/sqlite v1.46.1
 )
 
@@ -82,7 +86,6 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/spiffe/go-spiffe/v2 v2.9.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0 // indirect
@@ -104,9 +107,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/api v0.37.1 // indirect
-	k8s.io/apimachinery v0.37.1 // indirect
-	k8s.io/client-go v0.37.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd // indirect
