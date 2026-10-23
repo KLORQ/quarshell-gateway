@@ -1,0 +1,16 @@
+//go:build !windows
+
+package store
+
+import (
+	"os"
+)
+
+func syncOwnerOnlyDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
+}

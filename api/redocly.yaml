@@ -1,0 +1,5 @@
+extends:
+  - recommended
+rules:
+  # Health and probe endpoints document their method-specific failure status.
+  operation-4xx-response: off
