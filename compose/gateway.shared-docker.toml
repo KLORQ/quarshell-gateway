@@ -1,0 +1,13 @@
+[openshell]
+version = 1
+
+[openshell.gateway]
+compute_driver = "docker"
+disable_tls = true
+
+[openshell.drivers.docker]
+socket_path = "/var/run/docker.sock"
+default_image = "ghcr.io/klorq/quarshell/sandboxes/base:latest"
+sandbox_namespace = "quarshell"
+network_name = "quarshell-net"
+grpc_endpoint = "http://host.quarshell.internal:7443"
