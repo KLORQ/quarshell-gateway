@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "quarshell.fullname" . }}
+  labels:
+    {{- include "quarshell.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "quarshell.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "quarshell.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ include "quarshell.serviceAccountName" . }}
+      containers:
+        - name: gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --name
+            - {{ .Release.Name | quote }}
+            - --bind-address
+            - 0.0.0.0
+            - --port
+            - {{ .Values.service.port | quote }}
+            {{- if .Values.oidc.enabled }}
+            - --oidc-issuer
+            - {{ .Values.oidc.issuer | quote }}
+            {{- if .Values.oidc.audience }}
+            - --oidc-audience
+            - {{ .Values.oidc.audience | quote }}
+            {{- end }}
+            {{- if .Values.oidc.allowInsecureHTTP }}
+            - --oidc-dangerously-allow-insecure-http
+            {{- end }}
+            {{- with .Values.oidc.jwksAllowedOrigins }}
+            - --oidc-jwks-allowed-origins
+            - {{ join "," . | quote }}
+            {{- end }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          env:
+            - name: XDG_STATE_HOME
+              value: /var/lib
+            - name: QUARSHELL_SUPERVISOR_TOPOLOGY
+              value: {{ .Values.supervisor.topology | quote }}
+            - name: QUARSHELL_SUPERVISOR_SIDELOAD
+              value: {{ .Values.supervisor.sideloadMethod | quote }}
+            - name: QUARSHELL_GPU_RESOURCE
+              value: {{ .Values.gpu.resourceName | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: OPENSHELL_DB_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.uriKey }}
+            {{- end }}
+            {{- if .Values.secrets.existingSecret }}
+            - name: QUARSHELL_SECRETS_KEK
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.existingSecret }}
+                  key: {{ .Values.secrets.kekKey }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: /var/lib/openshell
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "quarshell.fullname" . }}-data
+        {{- end }}
