@@ -102,42 +102,42 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-cli
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-cli
 
       - name: Checkout quarshell-core
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-core
-          ref: v0.4.1
+          ref: v0.4.2
           path: quarshell-core
 
       - name: Checkout quarshell-providers
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-providers
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-providers
 
       - name: Checkout quarshell-runtime
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-runtime
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-runtime
 
       - name: Checkout quarshell-driver
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-driver
 
       - name: Checkout quarshell-proxy
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proxy
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-proxy
 
       - name: Checkout quarshell-slogx
@@ -218,42 +218,42 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-cli
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-cli
 
       - name: Checkout quarshell-core
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-core
-          ref: v0.4.1
+          ref: v0.4.2
           path: quarshell-core
 
       - name: Checkout quarshell-providers
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-providers
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-providers
 
       - name: Checkout quarshell-runtime
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-runtime
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-runtime
 
       - name: Checkout quarshell-driver
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-driver
 
       - name: Checkout quarshell-proxy
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proxy
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-proxy
 
       - name: Checkout quarshell-slogx
@@ -334,42 +334,42 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-cli
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-cli
 
       - name: Checkout quarshell-core
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-core
-          ref: v0.4.1
+          ref: v0.4.2
           path: quarshell-core
 
       - name: Checkout quarshell-providers
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-providers
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-providers
 
       - name: Checkout quarshell-runtime
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-runtime
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-runtime
 
       - name: Checkout quarshell-driver
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-driver
 
       - name: Checkout quarshell-proxy
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proxy
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-proxy
 
       - name: Checkout quarshell-slogx
@@ -448,42 +448,42 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-cli
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-cli
 
       - name: Checkout quarshell-core
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-core
-          ref: v0.4.1
+          ref: v0.4.2
           path: quarshell-core
 
       - name: Checkout quarshell-providers
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-providers
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-providers
 
       - name: Checkout quarshell-runtime
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-runtime
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-runtime
 
       - name: Checkout quarshell-driver
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-driver
 
       - name: Checkout quarshell-proxy
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proxy
-          ref: v0.1.0
+          ref: v0.1.1
           path: quarshell-proxy
 
       - name: Checkout quarshell-slogx
