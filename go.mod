@@ -8,7 +8,7 @@ require (
 	github.com/KLORQ/quarshell-core v0.4.2
 	github.com/KLORQ/quarshell-credentials v0.1.1
 	github.com/KLORQ/quarshell-driver v0.1.1
-	github.com/KLORQ/quarshell-driver-vm v0.1.1
+	github.com/KLORQ/quarshell-driver-vm v0.1.2
 	github.com/KLORQ/quarshell-policy v0.1.1
 	github.com/KLORQ/quarshell-proto v0.2.2
 	github.com/KLORQ/quarshell-prover v0.1.1
