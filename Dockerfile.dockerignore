@@ -1,0 +1,3 @@
+# GoReleaser and frontend builds leave large generated artifacts in module-local
+# dist directories. The gateway image builds from source and never consumes them.
+**/dist

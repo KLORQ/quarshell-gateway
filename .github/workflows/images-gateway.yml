@@ -1,0 +1,161 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 the cautem authors
+# SPDX-License-Identifier: Apache-2.0
+name: images-gateway
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - "compose/**"
+      - ".github/workflows/images-gateway.yml"
+  pull_request:
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "Dockerfile"
+      - "compose/**"
+      - ".github/workflows/images-gateway.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/cautem/cautem/gateway
+  GOWORK: ${{ github.workspace }}/go.work
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gateway
+        uses: actions/checkout@v4
+        with:
+          path: quarshell-gateway
+      - name: Checkout deps
+        uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-core
+          ref: v0.4.1
+          path: quarshell-core
+      - name: Checkout quarshell-proto
+        uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-proto
+          ref: v0.2.2
+          path: quarshell-proto
+      - uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-cli
+          ref: v0.1.0
+          path: quarshell-cli
+      - uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-display
+          ref: v0.1.0
+          path: quarshell-display
+      - uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-providers
+          ref: v0.1.0
+          path: quarshell-providers
+      - uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-runtime
+          ref: v0.1.0
+          path: quarshell-runtime
+      - uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-proxy
+          ref: v0.1.0
+          path: quarshell-proxy
+      - uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-driver
+          ref: v0.1.0
+          path: quarshell-driver
+      - uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-sdk
+          ref: v0.1.0
+          path: quarshell-sdk
+
+      - name: Checkout quarshell-slogx
+        uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-slogx
+          ref: v0.1.5
+          path: quarshell-slogx
+      - name: Write go.work
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo 'go 1.27.0'
+            echo 'use ('
+            modules=()
+            for d in quarshell-*; do
+              [[ -f "$d/go.mod" ]] && modules+=("$d")
+            done
+            for d in "${modules[@]}"; do
+              echo "  ./$d"
+            done
+            echo ')'
+            echo 'replace ('
+            for d in "${modules[@]}"; do
+              module="$(sed -n 's/^module[[:space:]][[:space:]]*//p' "$d/go.mod" | head -n 1)"
+              [[ -n "$module" ]] || continue
+              for source in "${modules[@]}"; do
+                awk -v module="$module" '$1 == module && $2 ~ /^v[0-9]/ { print $2 }; $1 == "require" && $2 == module && $3 ~ /^v[0-9]/ { print $3 }' "$source/go.mod"
+              done | sort -u | while IFS= read -r version; do
+                printf '  %s %s => ./%s\n' "$module" "$version" "$d"
+              done
+            done
+            echo ')'
+          } > "${{ github.workspace }}/go.work"
+          touch "${{ github.workspace }}/go.work.sum"
+          echo "Wrote go.work:" && cat "${{ github.workspace }}/go.work"
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.2"
+          cache: true
+          cache-dependency-path: |
+            quarshell-*/go.sum
+            quarshell-slogx/go.sum
+      - uses: docker/setup-buildx-action@v3
+      - name: Login GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=main,enable={{is_default_branch}}
+            type=sha
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: quarshell-gateway/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: VERSION=${{ steps.meta.outputs.version }}
