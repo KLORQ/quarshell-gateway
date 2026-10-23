@@ -8,12 +8,12 @@ import (
 )
 
 func TestCreateRequestRestoresVMRuntimeAssetsAndProxy(t *testing.T) {
-	proxyEnv := []string{"CAUTEM_VM_TEST=value"}
+	proxyEnv := []string{"QUARSHELL_VM_TEST=value"}
 	runtime := &Docker{
 		WorkspaceKind: driver.WorkspaceGuestOverlay,
 		GatewayURL:    "https://gateway.example:7444",
-		Runtime:       driver.RuntimeAssets{InitBinary: "/opt/cautem/init", SupervisorBinary: "/opt/cautem/supervisor", SSHBinary: "/opt/cautem/sshd", EnableSSH: true},
-		Proxy:         &driver.ProxySpec{Binary: "/opt/cautem/cautem", PolicyPath: "/var/lib/cautem/policy.yaml", Port: 3128, Environment: proxyEnv},
+		Runtime:       driver.RuntimeAssets{InitBinary: "/opt/quarshell/init", SupervisorBinary: "/opt/quarshell/supervisor", SSHBinary: "/opt/quarshell/sshd", EnableSSH: true},
+		Proxy:         &driver.ProxySpec{Binary: "/opt/quarshell/quarshell", PolicyPath: "/var/lib/quarshell/policy.yaml", Port: 3128, Environment: proxyEnv},
 	}
 	request, err := runtime.createRequest(Sandbox{
 		Workspace: "ws", Sandbox: "sb", Image: "image", TTY: true, AwaitMainProcessAttachment: true,
@@ -34,7 +34,7 @@ func TestCreateRequestRestoresVMRuntimeAssetsAndProxy(t *testing.T) {
 		t.Fatalf("proxy config = %+v", request.Network.Proxy)
 	}
 	request.Network.Proxy.Environment[0] = "mutated"
-	if proxyEnv[0] != "CAUTEM_VM_TEST=value" {
+	if proxyEnv[0] != "QUARSHELL_VM_TEST=value" {
 		t.Fatalf("proxy environment aliases gateway config: %q", proxyEnv)
 	}
 }

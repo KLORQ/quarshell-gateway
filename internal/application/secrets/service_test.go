@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/KLORQ/quarshell-core/domain"
-	"github.com/KLORQ/quarshell-credentials"
+	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
 )
 
 func testSecrets(t *testing.T) (*Service, *credentials.MemoryStore) {

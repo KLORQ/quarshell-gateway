@@ -19,10 +19,10 @@ import (
 	"time"
 
 	"github.com/KLORQ/quarshell-core/domain"
-	"github.com/KLORQ/quarshell-credentials"
 	_ "github.com/KLORQ/quarshell-driver-vm/vm"
 	"github.com/KLORQ/quarshell-driver/driver"
 	_ "github.com/KLORQ/quarshell-driver/driver/all"
+	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
 	"github.com/KLORQ/quarshell-gateway/internal/application/endpoint"
 	"github.com/KLORQ/quarshell-gateway/internal/application/eventlog"
 	"github.com/KLORQ/quarshell-gateway/internal/application/lifecycle"
@@ -42,8 +42,8 @@ import (
 	"github.com/KLORQ/quarshell-gateway/internal/sshrelay"
 	applicationgrpc "github.com/KLORQ/quarshell-gateway/internal/transport/applicationgrpc"
 	applicationhttp "github.com/KLORQ/quarshell-gateway/internal/transport/applicationhttp"
-	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/cautem/runtime/v1"
 	gatewayv1 "github.com/KLORQ/quarshell-proto/gen/go/openshell/gateway/v1"
+	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/quarshell/runtime/v1"
 	"google.golang.org/grpc"
 	grpcCredentials "google.golang.org/grpc/credentials"
 )
@@ -96,10 +96,10 @@ func main() {
 	runtimeConfig := flag.String("runtime-config", "{}", "backend config JSON (rootless/mounts/etc.)")
 	publicGatewayURL := flag.String("gateway-public-url", os.Getenv("QUARSHELL_GATEWAY_PUBLIC_URL"), "public Gateway URL reachable from runtime guests")
 	sessionSigningKey := os.Getenv("QUARSHELL_SESSION_SIGNING_KEY")
-	runtimeInit := flag.String("runtime-init-binary", os.Getenv("QUARSHELL_RUNTIME_INIT_BINARY"), "guest cautem-init binary")
-	runtimeSupervisor := flag.String("runtime-supervisor-binary", os.Getenv("QUARSHELL_RUNTIME_SUPERVISOR_BINARY"), "guest cautem-supervisor binary")
-	runtimeSSHD := flag.String("runtime-sshd-binary", os.Getenv("QUARSHELL_RUNTIME_SSHD_BINARY"), "guest cautem-sshd binary")
-	runtimeProxy := flag.String("runtime-proxy-binary", os.Getenv("QUARSHELL_RUNTIME_PROXY_BINARY"), "host cautem proxy binary for VM guest egress and relay")
+	runtimeInit := flag.String("runtime-init-binary", os.Getenv("QUARSHELL_RUNTIME_INIT_BINARY"), "guest quarshell-init binary")
+	runtimeSupervisor := flag.String("runtime-supervisor-binary", os.Getenv("QUARSHELL_RUNTIME_SUPERVISOR_BINARY"), "guest quarshell-supervisor binary")
+	runtimeSSHD := flag.String("runtime-sshd-binary", os.Getenv("QUARSHELL_RUNTIME_SSHD_BINARY"), "guest quarshell-sshd binary")
+	runtimeProxy := flag.String("runtime-proxy-binary", os.Getenv("QUARSHELL_RUNTIME_PROXY_BINARY"), "host quarshell proxy binary for VM guest egress and relay")
 	runtimePolicy := flag.String("runtime-policy-path", os.Getenv("QUARSHELL_RUNTIME_POLICY_PATH"), "host policy YAML used by VM proxy and guest supervisor")
 	sshHost := flag.String("gateway-ssh-host", "127.0.0.1", "gateway host returned by CreateSshSession")
 	sshPort := flag.Int("gateway-ssh-port", 7443, "gateway port returned by CreateSshSession")

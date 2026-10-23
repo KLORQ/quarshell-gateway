@@ -386,13 +386,6 @@ func NewHub() *Hub {
 	}
 }
 
-func (h *Hub) log() *slog.Logger {
-	if h.Log != nil {
-		return h.Log
-	}
-	return slog.Default()
-}
-
 // Connected reports whether sandbox has a live supervisor control stream.
 func (h *Hub) Connected(sandbox string) bool {
 	h.mu.Lock()

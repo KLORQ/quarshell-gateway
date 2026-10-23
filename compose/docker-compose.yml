@@ -13,8 +13,8 @@ services:
       dockerfile: quarshell-gateway/Dockerfile
     image: quarshell-gateway:local
     ports:
-      - "${CAUTEM_GATEWAY_BIND_IP:-127.0.0.1}:${CAUTEM_GATEWAY_PORT:-7443}:7443"
-      - "${CAUTEM_GATEWAY_BIND_IP:-127.0.0.1}:${CAUTEM_GRPC_PORT:-7445}:7444"
+      - "${QUARSHELL_GATEWAY_BIND_IP:-127.0.0.1}:${QUARSHELL_GATEWAY_PORT:-7443}:7443"
+      - "${QUARSHELL_GATEWAY_BIND_IP:-127.0.0.1}:${QUARSHELL_GRPC_PORT:-7445}:7444"
     command:
       - --listen
       - 0.0.0.0:7443
@@ -31,9 +31,9 @@ services:
     restart: unless-stopped
     # OpenShell Linux parity: sandbox/sidecar callback via host-gateway aliases.
     extra_hosts:
-      - "host.cautem.internal:host-gateway"
+      - "host.quarshell.internal:host-gateway"
       - "host.docker.internal:host-gateway"
-    networks: [cautem]
+    networks: [quarshell]
   # Retained UI preview; its OIDC flow is not integrated with this Gateway yet.
   quarshell-ui:
     profiles: ["ui"]
@@ -46,12 +46,12 @@ services:
     ports:
       - "127.0.0.1:${QUARSHELL_UI_PORT:-7444}:8080"
     environment:
-      CAUTEM_GATEWAY_UPSTREAM: ${CAUTEM_GATEWAY_UPSTREAM:-quarshell-gateway:7443}
+      QUARSHELL_GATEWAY_UPSTREAM: ${QUARSHELL_GATEWAY_UPSTREAM:-quarshell-gateway:7443}
     depends_on:
       - quarshell-gateway
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks: [cautem]
+    networks: [quarshell]
     restart: unless-stopped
   # Optional IdP for local OIDC login (profile: oidc).
   dex:
@@ -62,7 +62,7 @@ services:
       - "127.0.0.1:5556:5556"
     volumes:
       - ./dex/config.yaml:/etc/dex/config.yaml:ro
-    networks: [cautem]
+    networks: [quarshell]
     restart: unless-stopped
   postgres-tools:
     profiles: ["maintenance"]
@@ -72,11 +72,11 @@ services:
       OPENSHELL_DB_URL: ${OPENSHELL_DB_URL:-}
     volumes:
       - ./postgres-backup-client.sh:/usr/local/bin/postgres-backup-client.sh:ro
-    networks: [cautem]
+    networks: [quarshell]
     restart: "no"
 
 networks:
-  cautem:
+  quarshell:
     driver: bridge
 
 volumes:

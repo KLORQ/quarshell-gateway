@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/KLORQ/quarshell-credentials"
+	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
 	"github.com/KLORQ/quarshell-gateway/internal/application/endpoint"
 	"github.com/KLORQ/quarshell-gateway/internal/application/lifecycle"
 	policyapp "github.com/KLORQ/quarshell-gateway/internal/application/policy"
@@ -20,8 +20,8 @@ import (
 	tokenapp "github.com/KLORQ/quarshell-gateway/internal/application/token"
 	"github.com/KLORQ/quarshell-gateway/internal/application/workspace"
 	"github.com/KLORQ/quarshell-gateway/internal/sshrelay"
-	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/cautem/runtime/v1"
 	gatewayv1 "github.com/KLORQ/quarshell-proto/gen/go/openshell/gateway/v1"
+	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/quarshell/runtime/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

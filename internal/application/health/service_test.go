@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/KLORQ/quarshell-core/domain"
-	"github.com/KLORQ/quarshell-spi/compute"
+	"github.com/KLORQ/quarshell-driver/compute"
 )
 
 type fakeCompute struct {

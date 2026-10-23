@@ -370,6 +370,67 @@ func (s *Server) attachMainProcessTTY(ctx context.Context, ref domain.SandboxRef
 	}
 }
 
+func (s *Server) attachMainProcessStream(ctx context.Context, ref domain.SandboxRef, stream mainProcessTTYStream) error {
+	session, err := s.Sandboxes.OpenMainProcessStream(ctx, ref)
+	if err != nil {
+		return grpcError(err)
+	}
+	defer session.Close()
+	inputErrors := make(chan error, 1)
+	go func() {
+		for {
+			input, recvErr := stream.Recv()
+			if recvErr != nil {
+				if recvErr == io.EOF {
+					inputErrors <- session.CloseStdin()
+					return
+				}
+				inputErrors <- recvErr
+				_ = session.Close()
+				return
+			}
+			switch payload := input.GetPayload().(type) {
+			case *gatewayv1.ExecSandboxInput_Stdin:
+				if _, writeErr := session.Write(payload.Stdin); writeErr != nil {
+					inputErrors <- writeErr
+					_ = session.Close()
+					return
+				}
+			default:
+				inputErrors <- status.Error(codes.InvalidArgument, "non-TTY main-process attachment accepts only stdin")
+				_ = session.Close()
+				return
+			}
+		}
+	}()
+	for {
+		output, readErr := session.ReadOutput()
+		if readErr != nil {
+			select {
+			case inputErr := <-inputErrors:
+				if inputErr != nil && inputErr != io.EOF {
+					return grpcError(inputErr)
+				}
+			default:
+			}
+			return grpcError(readErr)
+		}
+		if len(output.Stdout) != 0 {
+			if err := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stdout{Stdout: &gatewayv1.ExecSandboxStdout{Data: output.Stdout}}}); err != nil {
+				return err
+			}
+		}
+		if len(output.Stderr) != 0 {
+			if err := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stderr{Stderr: &gatewayv1.ExecSandboxStderr{Data: output.Stderr}}}); err != nil {
+				return err
+			}
+		}
+		if output.Exited {
+			return stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Exit{Exit: &gatewayv1.ExecSandboxExit{ExitCode: int32(output.ExitCode)}}})
+		}
+	}
+}
+
 func (s *Server) execSandboxInteractiveStream(ctx context.Context, ref domain.SandboxRef, request *gatewayv1.ExecSandboxRequest, environment []string, stream gatewayv1.OpenShell_ExecSandboxInteractiveServer) error {
 	session, err := s.Sandboxes.OpenExecStream(ctx, ref, driver.ExecTerminalRequest{
 		Argv: append([]string(nil), request.GetCommand()...), Env: environment,
@@ -519,13 +580,11 @@ func sendExecOutput(stream gatewayv1.OpenShell_ExecSandboxServer, output []byte,
 		if len(chunk) > execOutputChunkBytes {
 			chunk = chunk[:execOutputChunkBytes]
 		}
-		payload := &gatewayv1.ExecSandboxEvent_Stdout{Stdout: &gatewayv1.ExecSandboxStdout{Data: append([]byte(nil), chunk...)}}
 		if !stdout {
-			payload = nil
 			if err := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stderr{Stderr: &gatewayv1.ExecSandboxStderr{Data: append([]byte(nil), chunk...)}}}); err != nil {
 				return err
 			}
-		} else if err := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: payload}); err != nil {
+		} else if err := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stdout{Stdout: &gatewayv1.ExecSandboxStdout{Data: append([]byte(nil), chunk...)}}}); err != nil {
 			return err
 		}
 		output = output[len(chunk):]

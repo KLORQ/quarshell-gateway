@@ -97,6 +97,16 @@ func (d *Docker) ResizePTY(ctx context.Context, sandbox Sandbox, columns, rows u
 	return terminal.ResizeMainProcessTTY(ctx, id(sandbox), columns, rows)
 }
 
+// MainProcessStream reconnects to the canonical workload's retained pipe
+// session when that workload was started without a PTY.
+func (d *Docker) MainProcessStream(ctx context.Context, sandbox Sandbox) (driver.ExecStreamSession, error) {
+	stream, ok := d.Backend.(driver.MainProcessStream)
+	if !ok {
+		return nil, domain.New(domain.CodeUnavailable, "sandboxruntime.main_process.stream", "backend does not expose retained non-TTY process streams")
+	}
+	return stream.OpenMainProcessStream(ctx, id(sandbox))
+}
+
 // WaitMainProcess returns the canonical process exit status.
 func (d *Docker) WaitMainProcess(ctx context.Context, sandbox Sandbox) (int, error) {
 	waiter, ok := d.Backend.(driver.MainProcessWaiter)

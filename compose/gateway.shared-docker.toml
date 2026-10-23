@@ -7,7 +7,7 @@ disable_tls = true
 
 [openshell.drivers.docker]
 socket_path = "/var/run/docker.sock"
-default_image = "ghcr.io/cautem/cautem/sandboxes/base:latest"
-sandbox_namespace = "cautem"
-network_name = "cautem-net"
-grpc_endpoint = "http://host.cautem.internal:7443"
+default_image = "ghcr.io/quarshell/quarshell/sandboxes/base:latest"
+sandbox_namespace = "quarshell"
+network_name = "quarshell-net"
+grpc_endpoint = "http://host.quarshell.internal:7443"

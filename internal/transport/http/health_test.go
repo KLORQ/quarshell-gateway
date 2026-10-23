@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/KLORQ/quarshell-core/domain"
+	"github.com/KLORQ/quarshell-driver/compute"
 	"github.com/KLORQ/quarshell-gateway/internal/application/health"
-	"github.com/KLORQ/quarshell-spi/compute"
 )
 
 type readyCompute struct{}

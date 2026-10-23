@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/KLORQ/quarshell-core/domain"
-	"github.com/KLORQ/quarshell-credentials"
+	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
 )
 
 // Metadata is credential metadata without material.

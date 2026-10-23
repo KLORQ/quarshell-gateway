@@ -16,7 +16,7 @@ import (
 	"github.com/KLORQ/quarshell-gateway/internal/application/eventlog"
 	"github.com/KLORQ/quarshell-gateway/internal/application/lifecycle"
 	policyengine "github.com/KLORQ/quarshell-policy"
-	"github.com/KLORQ/quarshell-prover"
+	"github.com/KLORQ/quarshell-policy/prover"
 )
 
 const (

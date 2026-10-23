@@ -6,7 +6,7 @@ import (
 	"context"
 
 	"github.com/KLORQ/quarshell-core/domain"
-	"github.com/KLORQ/quarshell-spi/compute"
+	"github.com/KLORQ/quarshell-driver/compute"
 )
 
 // Status is the current gateway health snapshot.

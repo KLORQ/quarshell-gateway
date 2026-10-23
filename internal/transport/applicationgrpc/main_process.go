@@ -7,8 +7,8 @@ import (
 
 	"github.com/KLORQ/quarshell-core/domain"
 	"github.com/KLORQ/quarshell-driver/driver"
-	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/cautem/runtime/v1"
 	gatewayv1 "github.com/KLORQ/quarshell-proto/gen/go/openshell/gateway/v1"
+	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/quarshell/runtime/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,11 +36,15 @@ func (s *Server) AttachTTY(stream grpc.BidiStreamingServer[runtimev1.MainProcess
 	if rows == 0 {
 		rows = defaultExecRows
 	}
-	if columns > 65535 || rows > 65535 {
+	if !start.GetNonTty() && (columns > 65535 || rows > 65535) {
 		return status.Error(codes.InvalidArgument, "terminal dimensions must not exceed 65535")
 	}
 	ref := domain.SandboxRef{Workspace: domain.WorkspaceID(start.GetWorkspace()), Sandbox: domain.SandboxID(start.GetSandbox())}
-	return s.attachMainProcessTTY(stream.Context(), ref, columns, rows, &mainProcessTTYStreamAdapter{stream: stream})
+	adapter := &mainProcessTTYStreamAdapter{stream: stream}
+	if start.GetNonTty() {
+		return s.attachMainProcessStream(stream.Context(), ref, adapter)
+	}
+	return s.attachMainProcessTTY(stream.Context(), ref, columns, rows, adapter)
 }
 
 func (s *Server) Signal(ctx context.Context, request *runtimev1.MainProcessServiceSignalRequest) (*runtimev1.MainProcessServiceSignalResponse, error) {
@@ -95,6 +99,8 @@ func (s *mainProcessTTYStreamAdapter) Send(event *gatewayv1.ExecSandboxEvent) er
 	switch payload := event.GetPayload().(type) {
 	case *gatewayv1.ExecSandboxEvent_Stdout:
 		return s.stream.Send(&runtimev1.MainProcessServiceAttachTTYResponse{Payload: &runtimev1.MainProcessServiceAttachTTYResponse_Stdout{Stdout: payload.Stdout.GetData()}})
+	case *gatewayv1.ExecSandboxEvent_Stderr:
+		return s.stream.Send(&runtimev1.MainProcessServiceAttachTTYResponse{Payload: &runtimev1.MainProcessServiceAttachTTYResponse_Stderr{Stderr: payload.Stderr.GetData()}})
 	case *gatewayv1.ExecSandboxEvent_Exit:
 		return s.stream.Send(&runtimev1.MainProcessServiceAttachTTYResponse{Payload: &runtimev1.MainProcessServiceAttachTTYResponse_ExitCode{ExitCode: payload.Exit.GetExitCode()}})
 	default:

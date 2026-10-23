@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/KLORQ/quarshell-core/domain"
-	"github.com/KLORQ/quarshell-credentials"
+	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
 	"github.com/KLORQ/quarshell-gateway/internal/application/endpoint"
 	"github.com/KLORQ/quarshell-gateway/internal/application/eventlog"
 	policyapp "github.com/KLORQ/quarshell-gateway/internal/application/policy"

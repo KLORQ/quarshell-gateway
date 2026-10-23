@@ -13,7 +13,7 @@ import (
 	"github.com/KLORQ/quarshell-gateway/internal/application/lifecycle"
 	sandboxapp "github.com/KLORQ/quarshell-gateway/internal/application/sandbox"
 	"github.com/KLORQ/quarshell-gateway/internal/application/sandboxruntime"
-	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/cautem/runtime/v1"
+	runtimev1 "github.com/KLORQ/quarshell-proto/gen/go/quarshell/runtime/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -21,9 +21,14 @@ import (
 
 type mainProcessRuntime struct {
 	terminal *mainProcessTerminal
+	stream   *mainProcessPipeStream
 	cols     uint32
 	rows     uint32
 	signal   driver.ExecProcessSignal
+}
+
+func (r *mainProcessRuntime) MainProcessStream(context.Context, sandboxruntime.Sandbox) (driver.ExecStreamSession, error) {
+	return r.stream, nil
 }
 
 func (r *mainProcessRuntime) Create(context.Context, sandboxruntime.Sandbox) (string, error) {
@@ -60,6 +65,37 @@ type mainProcessTerminal struct {
 	ready    chan struct{}
 	readyOne sync.Once
 }
+
+type mainProcessPipeStream struct {
+	outputs   []driver.ExecStreamOutput
+	stdin     bytes.Buffer
+	closed    bool
+	ready     chan struct{}
+	stdinDone chan struct{}
+	readyOnce sync.Once
+	closeOnce sync.Once
+}
+
+func (s *mainProcessPipeStream) Write(data []byte) (int, error) {
+	n, err := s.stdin.Write(data)
+	s.readyOnce.Do(func() { close(s.ready) })
+	return n, err
+}
+func (s *mainProcessPipeStream) ReadOutput() (driver.ExecStreamOutput, error) {
+	<-s.ready
+	if len(s.outputs) == 0 {
+		return driver.ExecStreamOutput{}, io.EOF
+	}
+	out := s.outputs[0]
+	s.outputs = s.outputs[1:]
+	return out, nil
+}
+func (s *mainProcessPipeStream) CloseStdin() error {
+	s.closed = true
+	s.closeOnce.Do(func() { close(s.stdinDone) })
+	return nil
+}
+func (*mainProcessPipeStream) Close() error { return nil }
 
 func TestSignalMainProcessRPCUsesWorkspaceScopedCanonicalProcess(t *testing.T) {
 	runtime := &mainProcessRuntime{terminal: newMainProcessTerminal()}
@@ -165,5 +201,67 @@ func TestAttachTTYStreamsCanonicalMainProcessAndExit(t *testing.T) {
 	}
 	if string(output) != "canonical-output" || exitCode != 13 || runtime.cols != 101 || runtime.rows != 41 || terminal.stdin.String() != "hello\n" {
 		t.Fatalf("attach output=%q exit=%d resize=%dx%d stdin=%q", output, exitCode, runtime.cols, runtime.rows, terminal.stdin.String())
+	}
+}
+
+func TestAttachNonTTYStreamsCanonicalMainProcessStdoutStderrAndInput(t *testing.T) {
+	retained := &mainProcessPipeStream{outputs: []driver.ExecStreamOutput{{Stdout: []byte("out")}, {Stderr: []byte("err")}, {ExitCode: 17, Exited: true}}, ready: make(chan struct{}), stdinDone: make(chan struct{})}
+	runtime := &mainProcessRuntime{terminal: newMainProcessTerminal(), stream: retained}
+	sandboxes, err := sandboxapp.NewService(lifecycle.NewMemoryStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sandboxes.Runtime = runtime
+	if _, _, err := sandboxes.Create(context.Background(), sandboxapp.Request{
+		Workspace: "team", Sandbox: "agent", Generation: domain.Generation(1), Image: "alpine:3.22",
+		Command: []string{"/bin/sh"}, TTY: false, IdempotencyKey: "create-main-pipes",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	listener := bufconn.Listen(1 << 20)
+	server := grpc.NewServer()
+	runtimev1.RegisterMainProcessServiceServer(server, &Server{Sandboxes: sandboxes})
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(server.Stop)
+	connection, err := grpc.NewClient("passthrough:///bufnet", grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return listener.Dial() }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = connection.Close() })
+	stream, err := runtimev1.NewMainProcessServiceClient(connection).AttachTTY(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.Send(&runtimev1.MainProcessServiceAttachTTYRequest{Payload: &runtimev1.MainProcessServiceAttachTTYRequest_Start{Start: &runtimev1.MainProcessTTYStart{Workspace: "team", Sandbox: "agent", NonTty: true}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.Send(&runtimev1.MainProcessServiceAttachTTYRequest{Payload: &runtimev1.MainProcessServiceAttachTTYRequest_Stdin{Stdin: []byte("input")}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.CloseSend(); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr []byte
+	exitCode := int32(-1)
+	for {
+		event, recvErr := stream.Recv()
+		if recvErr == io.EOF {
+			break
+		}
+		if recvErr != nil {
+			t.Fatal(recvErr)
+		}
+		switch payload := event.GetPayload().(type) {
+		case *runtimev1.MainProcessServiceAttachTTYResponse_Stdout:
+			stdout = append(stdout, payload.Stdout...)
+		case *runtimev1.MainProcessServiceAttachTTYResponse_Stderr:
+			stderr = append(stderr, payload.Stderr...)
+		case *runtimev1.MainProcessServiceAttachTTYResponse_ExitCode:
+			exitCode = payload.ExitCode
+		}
+	}
+	<-retained.stdinDone
+	if string(stdout) != "out" || string(stderr) != "err" || exitCode != 17 || retained.stdin.String() != "input" || !retained.closed {
+		t.Fatalf("stdout=%q stderr=%q exit=%d stdin=%q closed=%t", stdout, stderr, exitCode, retained.stdin.String(), retained.closed)
 	}
 }

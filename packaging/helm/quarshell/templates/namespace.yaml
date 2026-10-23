@@ -4,5 +4,5 @@ kind: Namespace
 metadata:
   name: {{ .Values.sandbox.namespace }}
   labels:
-    app.kubernetes.io/part-of: cautem
+    app.kubernetes.io/part-of: quarshell
 {{- end }}

@@ -30,12 +30,12 @@ After OIDC login as a platform admin, create workspaces and invite members with
 the CLI:
 
 ```bash
-cautem gateway add https://gateway.example --name shared
-cautem gateway select shared
-cautem gateway login
-cautem workspace create --name team-a
-cautem workspace member add --workspace team-a --subject 'user-id-from-oidc' --role user
-cautem workspace member add --workspace team-a --subject 'admin-id-from-oidc' --role admin
+quarshell gateway add https://gateway.example --name shared
+quarshell gateway select shared
+quarshell gateway login
+quarshell workspace create --name team-a
+quarshell workspace member add --workspace team-a --subject 'user-id-from-oidc' --role user
+quarshell workspace member add --workspace team-a --subject 'admin-id-from-oidc' --role admin
 ```
 
 Membership checks happen in the Gateway for each workspace API, terminal,
@@ -81,12 +81,12 @@ workspaces.
 
 The Kubernetes compute driver now provisions workspace namespaces, default-deny
 and paired runtime NetworkPolicies, Agent Sandbox workloads with PVC-backed
-workspaces, and a separate Cautem proxy companion. It is experimental: this
+workspaces, and a separate Quarshell proxy companion. It is experimental: this
 workspace has not verified a complete Gateway-to-workload session on a target
 cluster. Kubernetes compute also requires the Agent Sandbox controller,
-digest-pinned `CAUTEM_KUBERNETES_PROXY_IMAGE` and
-`CAUTEM_KUBERNETES_RUNTIME_IMAGE`, a reachable
-`CAUTEM_KUBERNETES_GRPC_ENDPOINT`, persistent storage, and a CNI that enforces
+digest-pinned `QUARSHELL_KUBERNETES_PROXY_IMAGE` and
+`QUARSHELL_KUBERNETES_RUNTIME_IMAGE`, a reachable
+`QUARSHELL_KUBERNETES_GRPC_ENDPOINT`, persistent storage, and a CNI that enforces
 NetworkPolicy. Follow the live traffic and runtime checks in the
 [packaging guide](../packaging/README.md) before enabling it. The Helm chart
 does not yet install the Agent Sandbox controller or configure its RBAC. Use
@@ -114,7 +114,7 @@ Back up the complete Gateway data volume, including the encrypted credential
 store, auth material, and archived logs. When PostgreSQL is configured, the
 backup also includes a custom-format `pg_dump` of the registry database. Both
 snapshots are taken while the Gateway is stopped. Keep an externally supplied
-`CAUTEM_SECRETS_KEK` in a separate secret manager; a backup without its original
+`QUARSHELL_SECRETS_KEK` in a separate secret manager; a backup without its original
 KEK cannot decrypt provider credentials. The scripts restart the Gateway after
 a successful backup:
 

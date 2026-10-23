@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/KLORQ/quarshell-slogx"
+	"github.com/KLORQ/quarshell-core/slogx"
 )
 
 // Options tweak Setup.

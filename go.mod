@@ -2,18 +2,14 @@ module github.com/KLORQ/quarshell-gateway
 
 go 1.27.0
 
-toolchain go1.27.2
+toolchain go1.27.3
 
 require (
-	github.com/KLORQ/quarshell-core v0.4.2
-	github.com/KLORQ/quarshell-credentials v0.1.1
-	github.com/KLORQ/quarshell-driver v0.1.1
-	github.com/KLORQ/quarshell-driver-vm v0.1.3
-	github.com/KLORQ/quarshell-policy v0.1.1
-	github.com/KLORQ/quarshell-proto v0.2.2
-	github.com/KLORQ/quarshell-prover v0.1.1
-	github.com/KLORQ/quarshell-slogx v0.1.5
-	github.com/KLORQ/quarshell-spi v0.1.1
+	github.com/KLORQ/quarshell-core v0.5.0
+	github.com/KLORQ/quarshell-driver v0.2.0
+	github.com/KLORQ/quarshell-driver-vm v0.1.4
+	github.com/KLORQ/quarshell-policy v0.2.0
+	github.com/KLORQ/quarshell-proto v0.2.3
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	golang.org/x/sys v0.49.0

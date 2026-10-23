@@ -1,4 +1,4 @@
-# Minimal Dex for local cautem OIDC login (compose profile "oidc").
+# Minimal Dex for local quarshell OIDC login (compose profile "oidc").
 # Static client quarshell-cli; password grant user admin@example.com / password.
 issuer: http://127.0.0.1:5556/dex
 storage:
@@ -11,7 +11,7 @@ oauth2:
   skipApprovalScreen: true
 staticClients:
   - id: quarshell-cli
-    name: cautem CLI
+    name: quarshell CLI
     public: true
     redirectURIs:
       - http://127.0.0.1:18765/callback

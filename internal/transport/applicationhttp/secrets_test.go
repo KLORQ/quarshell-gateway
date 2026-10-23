@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/KLORQ/quarshell-credentials"
+	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
 	"github.com/KLORQ/quarshell-gateway/internal/application/eventlog"
 	"github.com/KLORQ/quarshell-gateway/internal/application/lifecycle"
 	"github.com/KLORQ/quarshell-gateway/internal/application/sandbox"

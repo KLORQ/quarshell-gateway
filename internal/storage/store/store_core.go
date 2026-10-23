@@ -398,7 +398,7 @@ func (s *Store) flushLocked() error {
 	if s.db != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		result, err := s.db.Exec(ctx, `UPDATE cautem_gateway_state SET state = $1::jsonb, updated_at = now() WHERE installation_key = $2`, string(b), s.dbKey)
+		result, err := s.db.Exec(ctx, `UPDATE quarshell_gateway_state SET state = $1::jsonb, updated_at = now() WHERE installation_key = $2`, string(b), s.dbKey)
 		if err != nil {
 			s.state.UpdatedAt = previousUpdatedAt
 			s.state.SchemaVersion = previousSchemaVersion
@@ -450,7 +450,7 @@ func OpenPostgres(ctx context.Context, dataDir, gatewayID, installationKey, data
 	if !locked {
 		return closeOnError(fmt.Errorf("gateway store: another Gateway process owns PostgreSQL installation key %q", installationKey))
 	}
-	if _, err := conn.Exec(startupCtx, `CREATE TABLE IF NOT EXISTS cautem_gateway_state (
+	if _, err := conn.Exec(startupCtx, `CREATE TABLE IF NOT EXISTS quarshell_gateway_state (
 		installation_key text PRIMARY KEY,
 		state jsonb NOT NULL,
 		updated_at timestamptz NOT NULL DEFAULT now()
@@ -458,7 +458,7 @@ func OpenPostgres(ctx context.Context, dataDir, gatewayID, installationKey, data
 		return closeOnError(fmt.Errorf("gateway store: PostgreSQL schema initialization failed"))
 	}
 	var raw []byte
-	err = conn.QueryRow(startupCtx, `SELECT state FROM cautem_gateway_state WHERE installation_key = $1`, installationKey).Scan(&raw)
+	err = conn.QueryRow(startupCtx, `SELECT state FROM quarshell_gateway_state WHERE installation_key = $1`, installationKey).Scan(&raw)
 	switch {
 	case err == nil:
 		if err := json.Unmarshal(raw, &s.state); err != nil {
@@ -475,7 +475,7 @@ func OpenPostgres(ctx context.Context, dataDir, gatewayID, installationKey, data
 		if marshalErr != nil {
 			return closeOnError(marshalErr)
 		}
-		if _, err := conn.Exec(startupCtx, `INSERT INTO cautem_gateway_state (installation_key, state) VALUES ($1, $2::jsonb)`, installationKey, string(b)); err != nil {
+		if _, err := conn.Exec(startupCtx, `INSERT INTO quarshell_gateway_state (installation_key, state) VALUES ($1, $2::jsonb)`, installationKey, string(b)); err != nil {
 			return closeOnError(fmt.Errorf("gateway store: import initial PostgreSQL state failed"))
 		}
 	case err != nil:

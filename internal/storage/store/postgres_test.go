@@ -12,9 +12,9 @@ import (
 )
 
 func TestOpenPostgresImportsPersistsAndLocksInstallation(t *testing.T) {
-	databaseURL := os.Getenv("CAUTEM_TEST_POSTGRES_URL")
+	databaseURL := os.Getenv("QUARSHELL_TEST_POSTGRES_URL")
 	if databaseURL == "" {
-		t.Skip("CAUTEM_TEST_POSTGRES_URL is not set")
+		t.Skip("QUARSHELL_TEST_POSTGRES_URL is not set")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -27,7 +27,7 @@ func TestOpenPostgresImportsPersistsAndLocksInstallation(t *testing.T) {
 			return
 		}
 		defer conn.Close(cleanupCtx)
-		_, _ = conn.Exec(cleanupCtx, `DELETE FROM cautem_gateway_state WHERE installation_key = $1`, installationKey)
+		_, _ = conn.Exec(cleanupCtx, `DELETE FROM quarshell_gateway_state WHERE installation_key = $1`, installationKey)
 	})
 
 	dataDir := t.TempDir()

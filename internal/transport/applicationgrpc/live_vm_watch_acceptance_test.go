@@ -3,14 +3,23 @@
 package applicationgrpc
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -81,13 +90,124 @@ func (r *liveVMWatchRuntime) Exec(ctx context.Context, sandbox sandboxruntime.Sa
 	return r.backend.Exec(ctx, core.ID(sandbox.RuntimeID), request)
 }
 
-func TestLiveVMWatchSandboxComposition(t *testing.T) {
-	if os.Getenv("CAUTEM_VM_ACCEPTANCE") != "1" {
-		t.Skip("set CAUTEM_VM_ACCEPTANCE=1 to run live HVF Gateway watch acceptance")
+type liveGatewayOCIObject struct {
+	mediaType string
+	body      []byte
+}
+
+func liveGatewayBootstrapImage(t *testing.T, rootfsTar string) string {
+	t.Helper()
+	rootfs, err := os.ReadFile(rootfsTar)
+	if err != nil {
+		t.Fatalf("read live Gateway bootstrap rootfs: %v", err)
 	}
-	rootfsTar := strings.TrimSpace(os.Getenv("CAUTEM_VM_TEST_ROOTFS_TAR"))
+	var compressed bytes.Buffer
+	writer := gzip.NewWriter(&compressed)
+	if _, err := writer.Write(rootfs); err != nil {
+		t.Fatalf("compress live Gateway bootstrap rootfs: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("finish live Gateway bootstrap layer: %v", err)
+	}
+	digest := func(payload []byte) string {
+		hash := sha256.Sum256(payload)
+		return "sha256:" + hex.EncodeToString(hash[:])
+	}
+	rootfsDigest := digest(rootfs)
+	layer := compressed.Bytes()
+	layerDigest := digest(layer)
+	config, err := json.Marshal(map[string]any{
+		"architecture": runtime.GOARCH,
+		"os":           "linux",
+		"rootfs":       map[string]any{"type": "layers", "diff_ids": []string{rootfsDigest}},
+		"config":       map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("encode live Gateway bootstrap image config: %v", err)
+	}
+	configDigest := digest(config)
+	manifest, err := json.Marshal(map[string]any{
+		"schemaVersion": 2,
+		"mediaType":     "application/vnd.oci.image.manifest.v1+json",
+		"config": map[string]any{
+			"mediaType": "application/vnd.oci.image.config.v1+json",
+			"digest":    configDigest,
+			"size":      len(config),
+		},
+		"layers": []map[string]any{{
+			"mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+			"digest":    layerDigest,
+			"size":      len(layer),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("encode live Gateway bootstrap manifest: %v", err)
+	}
+	manifestDigest := digest(manifest)
+	index, err := json.Marshal(map[string]any{
+		"schemaVersion": 2,
+		"mediaType":     "application/vnd.oci.image.index.v1+json",
+		"manifests": []map[string]any{{
+			"mediaType": "application/vnd.oci.image.manifest.v1+json",
+			"digest":    manifestDigest,
+			"size":      len(manifest),
+			"platform":  map[string]string{"os": "linux", "architecture": runtime.GOARCH},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("encode live Gateway bootstrap image index: %v", err)
+	}
+	indexDigest := digest(index)
+	objects := map[string]liveGatewayOCIObject{
+		"manifest:" + indexDigest:    {mediaType: "application/vnd.oci.image.index.v1+json", body: index},
+		"manifest:" + manifestDigest: {mediaType: "application/vnd.oci.image.manifest.v1+json", body: manifest},
+		"blob:" + configDigest:       {mediaType: "application/vnd.oci.image.config.v1+json", body: config},
+		"blob:" + layerDigest:        {mediaType: "application/vnd.oci.image.layer.v1.tar+gzip", body: layer},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.URL.Path == "/v2/" {
+			response.Header().Set("Docker-Distribution-API-Version", "registry/2.0")
+			response.WriteHeader(http.StatusOK)
+			return
+		}
+		key := ""
+		switch {
+		case strings.HasPrefix(request.URL.Path, "/v2/agent/manifests/"):
+			name := strings.TrimPrefix(request.URL.Path, "/v2/agent/manifests/")
+			if name == "latest" {
+				name = indexDigest
+			}
+			key = "manifest:" + name
+		case strings.HasPrefix(request.URL.Path, "/v2/agent/blobs/"):
+			key = "blob:" + strings.TrimPrefix(request.URL.Path, "/v2/agent/blobs/")
+		default:
+			http.NotFound(response, request)
+			return
+		}
+		object, ok := objects[key]
+		if !ok {
+			http.NotFound(response, request)
+			return
+		}
+		response.Header().Set("Content-Type", object.mediaType)
+		objectDigest := strings.TrimPrefix(strings.TrimPrefix(key, "manifest:"), "blob:")
+		response.Header().Set("Docker-Content-Digest", objectDigest)
+		response.Header().Set("Content-Length", strconv.Itoa(len(object.body)))
+		if request.Method != http.MethodHead {
+			_, _ = response.Write(object.body)
+		}
+	}))
+	t.Cleanup(server.Close)
+	return strings.TrimPrefix(server.URL, "http://") + "/agent:latest"
+}
+
+func TestLiveVMWatchSandboxComposition(t *testing.T) {
+	if os.Getenv("QUARSHELL_VM_ACCEPTANCE") != "1" {
+		t.Skip("set QUARSHELL_VM_ACCEPTANCE=1 to run live HVF Gateway watch acceptance")
+	}
+	rootfsTar := strings.TrimSpace(os.Getenv("QUARSHELL_VM_TEST_ROOTFS_TAR"))
 	if rootfsTar == "" {
-		t.Fatal("CAUTEM_VM_TEST_ROOTFS_TAR is required")
+		t.Fatal("QUARSHELL_VM_TEST_ROOTFS_TAR is required")
 	}
 	host := vm.DefaultHostConfig()
 	host.StateDir = t.TempDir()
@@ -110,14 +230,15 @@ func TestLiveVMWatchSandboxComposition(t *testing.T) {
 	if err := errors.Join(copyErr, stagedRootfs.Close(), sourceRootfs.Close()); err != nil {
 		t.Fatalf("stage live VM rootfs tar: %v", err)
 	}
-	host.GuestAgentPath = strings.TrimSpace(os.Getenv("CAUTEM_VM_TEST_GUEST_AGENT"))
-	host.WorkerPath = strings.TrimSpace(os.Getenv("CAUTEM_VM_WORKER"))
-	host.FormatterPath = strings.TrimSpace(os.Getenv("CAUTEM_VM_TEST_E2FS_FORMATTER"))
+	host.GuestAgentPath = strings.TrimSpace(os.Getenv("QUARSHELL_VM_TEST_GUEST_AGENT"))
+	host.WorkerPath = strings.TrimSpace(os.Getenv("QUARSHELL_VM_WORKER"))
+	host.FormatterPath = strings.TrimSpace(os.Getenv("QUARSHELL_VM_TEST_E2FS_FORMATTER"))
 	host.AllowDriverConfig = true
-	// The driver needs a root-capable bootstrap environment to prepare the
-	// workload rootfs disk; the acceptance script pre-pulls this local image.
-	host.BootstrapImage = "docker.io/library/alpine:3.22"
-	host.DefaultImage = "docker.io/library/alpine:3.22"
+	// Serve the staged rootfs as a local OCI bootstrap image so this live lane
+	// does not depend on Docker Hub availability.
+	bootstrapImage := liveGatewayBootstrapImage(t, stagedRootfsTar)
+	host.BootstrapImage = bootstrapImage
+	host.DefaultImage = bootstrapImage
 	backend := vm.NewWithHostConfig(host)
 	runtime := &liveVMWatchRuntime{backend: backend, rootfsTar: stagedRootfsTar}
 	store := lifecycle.NewMemoryStore()
@@ -296,9 +417,9 @@ func assertLiveVMGatewayPTYInterrupt(t *testing.T, server *Server, ref domain.Sa
 
 func assertLiveVMArchiveTransferThroughGateway(t *testing.T, server *Server, ref domain.SandboxRef, ctx context.Context) {
 	t.Helper()
-	cliBinary := strings.TrimSpace(os.Getenv("CAUTEM_VM_TEST_CLI"))
+	cliBinary := strings.TrimSpace(os.Getenv("QUARSHELL_VM_TEST_CLI"))
 	if cliBinary == "" {
-		t.Fatal("CAUTEM_VM_TEST_CLI is required for live CLI-to-Gateway VM archive acceptance")
+		t.Fatal("QUARSHELL_VM_TEST_CLI is required for live CLI-to-Gateway VM archive acceptance")
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

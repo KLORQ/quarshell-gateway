@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/KLORQ/quarshell-core/domain"
-	"github.com/KLORQ/quarshell-spi/compute"
+	"github.com/KLORQ/quarshell-driver/compute"
 )
 
 // UnconfiguredCompute is a fail-closed compute backend used until a platform

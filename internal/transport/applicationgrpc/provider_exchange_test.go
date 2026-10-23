@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/KLORQ/quarshell-credentials"
+	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
 	"github.com/KLORQ/quarshell-gateway/internal/application/lifecycle"
 	sandboxapp "github.com/KLORQ/quarshell-gateway/internal/application/sandbox"
 	datamodelv1 "github.com/KLORQ/quarshell-proto/gen/go/openshell/datamodel/v1"

@@ -7,7 +7,7 @@ import (
 
 	"github.com/KLORQ/quarshell-core/domain"
 	"github.com/KLORQ/quarshell-gateway/internal/application/lifecycle"
-	"github.com/KLORQ/quarshell-prover"
+	"github.com/KLORQ/quarshell-policy/prover"
 )
 
 var validPolicy = []byte("version: 1\n")

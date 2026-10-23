@@ -1,10 +1,10 @@
-# Values for packaging/helm/cautem — gateway control plane.
+# Values for packaging/helm/quarshell — gateway control plane.
 # Sandbox pods remain driver-created; this chart deploys the gateway + RBAC/PVC.
 
 replicaCount: 1
 
 image:
-  repository: ghcr.io/cautem/cautem/gateway
+  repository: ghcr.io/quarshell/quarshell/gateway
   pullPolicy: IfNotPresent
   tag: "latest"
 
@@ -26,9 +26,9 @@ database:
 
 # Pin secrets KEK via existing Secret (recommended).
 secrets:
-  # create: kubectl create secret generic quarshell-gateway-kek --from-literal=CAUTEM_SECRETS_KEK=…
+  # create: kubectl create secret generic quarshell-gateway-kek --from-literal=QUARSHELL_SECRETS_KEK=…
   existingSecret: ""
-  kekKey: CAUTEM_SECRETS_KEK
+  kekKey: QUARSHELL_SECRETS_KEK
 
 oidc:
   enabled: false
@@ -44,7 +44,7 @@ serviceAccount:
 networkPolicy:
   enabled: false
   # allow sandbox namespace to reach gateway
-  sandboxNamespace: cautem-sandboxes
+  sandboxNamespace: quarshell-sandboxes
 
 ingress:
   enabled: false
@@ -68,7 +68,7 @@ supervisor:
   topology: combined
   sideloadMethod: ""
   image:
-    repository: ghcr.io/cautem/cautem/supervisor
+    repository: ghcr.io/quarshell/quarshell/supervisor
     tag: ""
     pullPolicy: IfNotPresent
 
@@ -77,6 +77,6 @@ gpu:
   defaultCount: 1
 
 sandbox:
-  namespace: cautem-sandboxes
-  image: ghcr.io/cautem/cautem/sandboxes/base:latest
+  namespace: quarshell-sandboxes
+  image: ghcr.io/quarshell/quarshell/sandboxes/base:latest
   createNamespace: true

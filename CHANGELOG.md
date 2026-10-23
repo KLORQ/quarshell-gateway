@@ -5,7 +5,7 @@
 ### Removed
 
 - Remove the first-party `InferenceService`, route state, and handlers; pinned OpenShell has no managed inference routes.
-- Remove the first-party `/debug/loglevel` HTTP route and the `CAUTEM_LOG_LEVEL_ADDR` listener setting, which have no pinned OpenShell counterpart.
+- Remove the first-party `/debug/loglevel` HTTP route and the `QUARSHELL_LOG_LEVEL_ADDR` listener setting, which have no pinned OpenShell counterpart.
 
 ### Fixed
 
@@ -68,7 +68,7 @@
 
 ### Changed
 
-- Rename the module, runtime identifiers and project references to the `cautem` namespace.
+- Rename the module, runtime identifiers and project references to the `quarshell` namespace.
 
 ## [v0.1.0-beta.2] - 2026-10-10
 
@@ -81,7 +81,7 @@
 
 ### Added
 
-- Expose the versioned `cautem.control.v1` management RPC contract with generated Go, Connect and TypeScript clients.
+- Expose the versioned `quarshell.control.v1` management RPC contract with generated Go, Connect and TypeScript clients.
 - Add bounded management views, lifecycle operations, logs, inference, services and gateway information over Control RPC.
 - Persist operation, audit and policy state with authorization, resource-version checks and idempotency.
 

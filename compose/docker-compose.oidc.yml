@@ -16,7 +16,7 @@ services:
 
   quarshell-ui:
     environment:
-      CAUTEM_GATEWAY_UPSTREAM: ${CAUTEM_GATEWAY_UPSTREAM:-host.docker.internal:${CAUTEM_GATEWAY_PORT:-7443}}
+      QUARSHELL_GATEWAY_UPSTREAM: ${QUARSHELL_GATEWAY_UPSTREAM:-host.docker.internal:${QUARSHELL_GATEWAY_PORT:-7443}}
 
   dex:
     network_mode: host

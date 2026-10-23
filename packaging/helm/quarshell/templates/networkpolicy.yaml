@@ -2,13 +2,13 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "cautem.fullname" . }}
+  name: {{ include "quarshell.fullname" . }}
   labels:
-    {{- include "cautem.labels" . | nindent 4 }}
+    {{- include "quarshell.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: {{ include "cautem.name" . }}
+      app.kubernetes.io/name: {{ include "quarshell.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
   policyTypes:
     - Ingress

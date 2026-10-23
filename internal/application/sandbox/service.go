@@ -344,6 +344,22 @@ func (s *Service) OpenMainProcessTTY(ctx context.Context, ref domain.SandboxRef,
 	return pty.PTY(ctx, runtimeInput(current), columns, rows)
 }
 
+// OpenMainProcessStream attaches to the retained stdout/stderr/stdin pipes of
+// a canonical workload started without a TTY.
+func (s *Service) OpenMainProcessStream(ctx context.Context, ref domain.SandboxRef) (driver.ExecStreamSession, error) {
+	current, err := s.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	streamer, ok := s.Runtime.(interface {
+		MainProcessStream(context.Context, sandboxruntime.Sandbox) (driver.ExecStreamSession, error)
+	})
+	if !ok {
+		return nil, domain.New(domain.CodeUnavailable, "sandbox.main_process.stream", "runtime does not support retained non-TTY process attachment")
+	}
+	return streamer.MainProcessStream(ctx, runtimeInput(current))
+}
+
 // ResizeMainProcessTTY resizes the canonical workload PTY.
 func (s *Service) ResizeMainProcessTTY(ctx context.Context, ref domain.SandboxRef, columns, rows uint32) error {
 	current, err := s.Get(ctx, ref)
@@ -872,17 +888,6 @@ func (s *Service) Delete(ctx context.Context, ref domain.SandboxRef, key domain.
 		return []byte(`{}`), nil
 	})
 	return err
-}
-
-func cloneAnyMap(values map[string]any) map[string]any {
-	if values == nil {
-		return nil
-	}
-	out := make(map[string]any, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
 }
 
 func cloneNetwork(network Network) Network {
