@@ -6,10 +6,10 @@ toolchain go1.27.3
 
 require (
 	github.com/KLORQ/quarshell-core v0.5.1
-	github.com/KLORQ/quarshell-driver v0.2.2
-	github.com/KLORQ/quarshell-driver-vm v0.1.5
+	github.com/KLORQ/quarshell-driver v0.2.3
+	github.com/KLORQ/quarshell-driver-vm v0.1.6
 	github.com/KLORQ/quarshell-policy v0.2.1
-	github.com/KLORQ/quarshell-proto v0.2.4
+	github.com/KLORQ/quarshell-proto v0.2.5
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/spiffe/go-spiffe/v2 v2.9.0
