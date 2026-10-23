@@ -1,6 +1,6 @@
 # Roadmap — quarshell-gateway
 
-Status: **v0.3.0** (release prepared) · Depends on core / driver `v0.3.0`, runtime `v0.3.0`, providers `v0.1.8`, proto `v0.2.0`; slogx `v0.1.3`
+Status: pre-stable API · Current module tag: `v0.1.1` · Dependencies are listed in `go.mod`.
 
 ## This module
 
@@ -11,6 +11,9 @@ Status: **v0.3.0** (release prepared) · Depends on core / driver `v0.3.0`, runt
 | G3 | **Helm / image** | Versioned chart + `ghcr.io/cautem/gateway` |
 | G4 | **Relay polish** | Long-poll exec reliability under load |
 
+
 ## Release
 
-Tagged after runtime + providers in the cascade.
+This module follows its own pre-stable 0.x version sequence. Publish dependencies
+first, update consumers to the published tags, and verify with `GOWORK=off`. Never
+rewrite a published tag.
