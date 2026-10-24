@@ -86,10 +86,16 @@ func TestExecAdmissionSurvivesSQLiteReopen(t *testing.T) {
 	if err := service.AdmitExecRequest(ctx, ref, id, "payload-hash"); err != nil {
 		t.Fatal(err)
 	}
-	if err := service.SetExecTerminalSessionID(ctx, ref, id, "payload-hash", "retained-terminal"); err != nil {
+	if err := service.SetExecSessionID(ctx, ref, id, "payload-hash", "retained-terminal"); err != nil {
 		t.Fatalf("persist retained terminal ID: %v", err)
 	}
-	if _, found, err := service.ExecTerminalSessionID(ctx, ref, id, "different-payload"); domain.CodeOf(err) != domain.CodeConflict || found {
+	if err := service.SetExecSessionCursor(ctx, ref, id, "payload-hash", 7); err != nil {
+		t.Fatalf("persist retained output cursor: %v", err)
+	}
+	if err := service.SetExecSessionCursor(ctx, ref, id, "payload-hash", 4); err != nil {
+		t.Fatalf("ignore stale output cursor: %v", err)
+	}
+	if _, found, err := service.ExecSessionID(ctx, ref, id, "different-payload"); domain.CodeOf(err) != domain.CodeConflict || found {
 		t.Fatalf("mismatched payload lookup found=%v err=%v, want conflict", found, err)
 	}
 	if err := store.Close(); err != nil {
@@ -108,8 +114,55 @@ func TestExecAdmissionSurvivesSQLiteReopen(t *testing.T) {
 	if err := service.AdmitExecRequest(ctx, ref, id, "payload-hash"); domain.CodeOf(err) != domain.CodeConflict {
 		t.Fatalf("duplicate after SQLite reopen = %v, want conflict", err)
 	}
-	sessionID, found, err := service.ExecTerminalSessionID(ctx, ref, id, "payload-hash")
-	if err != nil || !found || sessionID != "retained-terminal" {
-		t.Fatalf("terminal session after SQLite reopen = %q found=%v err=%v", sessionID, found, err)
+	sessionID, cursor, found, err := service.ExecSessionCheckpoint(ctx, ref, id, "payload-hash")
+	if err != nil || !found || sessionID != "retained-terminal" || cursor != 7 {
+		t.Fatalf("terminal session checkpoint after SQLite reopen = %q cursor=%d found=%v err=%v", sessionID, cursor, found, err)
+	}
+}
+
+func TestCanonicalOutputReaderCursorSurvivesGatewayReopenAndCannotRegress(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "reader.db")
+	store, err := lifecycle.NewSQLiteStore(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, err := NewService(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := domain.SandboxRef{Workspace: "ws", Sandbox: "canonical"}
+	cursor, err := service.PrepareOutputReader(ctx, ref, "reader-1", "canonical-hash")
+	if err != nil || cursor != 0 {
+		t.Fatalf("initial reader cursor=%d err=%v", cursor, err)
+	}
+	if err := service.SetOutputReaderCursor(ctx, ref, "reader-1", "canonical-hash", 12); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	store, err = lifecycle.NewSQLiteStore(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	service, err = NewService(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cursor, err = service.PrepareOutputReader(ctx, ref, "reader-1", "canonical-hash")
+	if err != nil || cursor != 12 {
+		t.Fatalf("reopened reader cursor=%d err=%v, want 12", cursor, err)
+	}
+	if err := service.SetOutputReaderCursor(ctx, ref, "reader-1", "canonical-hash", 6); err != nil {
+		t.Fatal(err)
+	}
+	cursor, err = service.PrepareOutputReader(ctx, ref, "reader-1", "canonical-hash")
+	if err != nil || cursor != 12 {
+		t.Fatalf("reader cursor regressed to %d, err=%v", cursor, err)
+	}
+	if _, err := service.PrepareOutputReader(ctx, ref, "reader-1", "different-sandbox-hash"); domain.CodeOf(err) != domain.CodeConflict {
+		t.Fatalf("reader reuse with a different binding = %v, want conflict", err)
 	}
 }

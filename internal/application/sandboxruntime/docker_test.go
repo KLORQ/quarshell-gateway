@@ -1,11 +1,36 @@
 package sandboxruntime
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
+	"github.com/KLORQ/quarshell-core"
 	"github.com/KLORQ/quarshell-driver/driver"
 )
+
+type exitRecorderBackend struct {
+	driver.Backend
+	id         core.ID
+	instanceID string
+	exitCode   int32
+}
+
+func (b *exitRecorderBackend) RecordMainProcessExit(_ context.Context, id core.ID, instanceID string, exitCode int32) error {
+	b.id, b.instanceID, b.exitCode = id, instanceID, exitCode
+	return nil
+}
+
+func TestRecordMainProcessExitForwardsToBackend(t *testing.T) {
+	backend := &exitRecorderBackend{}
+	runtime := &Docker{Backend: backend}
+	if err := runtime.RecordMainProcessExit(context.Background(), Sandbox{Sandbox: "sb"}, "supervisor-1", 137); err != nil {
+		t.Fatal(err)
+	}
+	if backend.id != "sb" || backend.instanceID != "supervisor-1" || backend.exitCode != 137 {
+		t.Fatalf("recorded exit = id %q instance %q code %d", backend.id, backend.instanceID, backend.exitCode)
+	}
+}
 
 func TestCreateRequestRestoresVMRuntimeAssetsAndProxy(t *testing.T) {
 	proxyEnv := []string{"QUARSHELL_VM_TEST=value"}

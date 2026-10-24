@@ -3,6 +3,7 @@ package applicationgrpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"path/filepath"
@@ -269,6 +270,57 @@ func (stream *supervisorConnectStream) Recv() (*gatewayv1.SupervisorMessage, err
 		return message, nil
 	case <-stream.ctx.Done():
 		return nil, stream.ctx.Err()
+	}
+}
+
+func TestConnectSupervisorRedirectsBeforeDurableOwnerClaim(t *testing.T) {
+	ctx := context.Background()
+	store := lifecycle.NewMemoryStore()
+	sandboxes, err := sandboxapp.NewService(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ring, err := NewReplicaRing("gateway-a", []GatewayReplica{{ID: "gateway-a"}, {ID: "gateway-b", Endpoint: "https://gateway-b.example:7444"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sandboxID := ""
+	for i := 0; i < 1000; i++ {
+		candidate := fmt.Sprintf("sandbox-%d", i)
+		if ring.owner(candidate, "") == "gateway-b" {
+			sandboxID = candidate
+			break
+		}
+	}
+	if sandboxID == "" {
+		t.Fatal("could not find a sandbox assigned to peer")
+	}
+	ref := domain.SandboxRef{Workspace: "ws", Sandbox: domain.SandboxID(sandboxID)}
+	if _, _, err := sandboxes.Create(ctx, sandboxapp.Request{Workspace: ref.Workspace, Sandbox: ref.Sandbox, Generation: 1, Image: "image"}); err != nil {
+		t.Fatal(err)
+	}
+	started, _, err := sandboxes.Start(ctx, ref, 1, "start-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal := authenticatedPrincipal{identityProvider: "sandbox-token", workspace: ref.Workspace, sandbox: ref.Sandbox, generation: started.RuntimeGenerationOrInitial(), credentialEpoch: started.CredentialEpochOrInitial()}
+	streamCtx := context.WithValue(ctx, principalContextKey{}, principal)
+	stream := &supervisorConnectStream{ctx: streamCtx, recv: make(chan *gatewayv1.SupervisorMessage, 1), sent: make(chan *gatewayv1.GatewayMessage, 1)}
+	stream.recv <- &gatewayv1.SupervisorMessage{Payload: &gatewayv1.SupervisorMessage_Hello{Hello: &gatewayv1.SupervisorHello{SandboxId: sandboxID, InstanceId: "instance-1", ConnectionEpoch: 1, SupportsSessionRedirect: true}}}
+	server := New("test", nil, sandboxes, nil, nil, nil, nil, nil)
+	server.ReplicaRouting = ring
+	if err := server.ConnectSupervisor(stream); err != nil {
+		t.Fatalf("ConnectSupervisor: %v", err)
+	}
+	message := <-stream.sent
+	if redirect := message.GetSessionRedirect(); redirect == nil || redirect.GetOwnerReplicaId() != "gateway-b" || redirect.GetPeerEndpoint() != "https://gateway-b.example:7444" {
+		t.Fatalf("response = %+v; want peer redirect", message)
+	}
+	if _, _, connected := server.SupervisorHub.SupervisorSession(sandboxID); connected {
+		t.Fatal("redirected session was registered locally")
+	}
+	if err := sandboxes.ValidateSupervisorSession(ctx, ref, started.RuntimeGenerationOrInitial(), started.CredentialEpochOrInitial(), "instance-1", 1); err == nil {
+		t.Fatal("redirected session claimed the durable owner")
 	}
 }
 

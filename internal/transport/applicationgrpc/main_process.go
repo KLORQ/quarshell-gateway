@@ -40,11 +40,24 @@ func (s *Server) AttachTTY(stream grpc.BidiStreamingServer[runtimev1.MainProcess
 		return status.Error(codes.InvalidArgument, "terminal dimensions must not exceed 65535")
 	}
 	ref := domain.SandboxRef{Workspace: domain.WorkspaceID(start.GetWorkspace()), Sandbox: domain.SandboxID(start.GetSandbox())}
+	readerID := strings.TrimSpace(start.GetReaderId())
+	var cursor uint64
+	readerHash := ""
+	if readerID != "" {
+		if !isNonzeroUUID(readerID) {
+			return status.Error(codes.InvalidArgument, "reader_id must be a canonical UUID")
+		}
+		readerHash = canonicalMainProcessReaderHash(ref)
+		cursor, err = s.Sandboxes.PrepareOutputReader(stream.Context(), ref, readerID, readerHash)
+		if err != nil {
+			return grpcError(err)
+		}
+	}
 	adapter := &mainProcessTTYStreamAdapter{stream: stream}
 	if start.GetNonTty() {
-		return s.attachMainProcessStream(stream.Context(), ref, adapter)
+		return s.attachMainProcessStream(stream.Context(), ref, readerID, readerHash, cursor, adapter)
 	}
-	return s.attachMainProcessTTY(stream.Context(), ref, columns, rows, adapter)
+	return s.attachMainProcessTTY(stream.Context(), ref, columns, rows, readerID, readerHash, cursor, adapter)
 }
 
 func (s *Server) Signal(ctx context.Context, request *runtimev1.MainProcessServiceSignalRequest) (*runtimev1.MainProcessServiceSignalResponse, error) {

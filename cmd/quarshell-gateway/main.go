@@ -88,6 +88,10 @@ func main() {
 	name := flag.String("name", "quarshell", "gateway name")
 	gatewayID := flag.String("gateway-id", envOrDefault("QUARSHELL_GATEWAY_ID", "openshell"), "stable OpenShell Gateway identity used in session JWTs")
 	grpcListen := flag.String("grpc-listen", "127.0.0.1:7444", "gRPC listen address; empty disables")
+	replicaID := flag.String("replica-id", os.Getenv("QUARSHELL_GATEWAY_REPLICA_ID"), "stable ID for this Gateway replica")
+	replicaPeers := flag.String("replica-peers", os.Getenv("QUARSHELL_GATEWAY_REPLICA_PEERS"), "comma-separated id=http(s)://host:port replica membership")
+	replicaSRV := flag.String("replica-discovery-srv", os.Getenv("QUARSHELL_GATEWAY_REPLICA_DISCOVERY_SRV"), "DNS SRV record for dynamic replica membership")
+	replicaRefreshInterval := flag.Duration("replica-discovery-interval", 5*time.Second, "replica membership refresh interval")
 	gatewayConfigPath := flag.String("config", "", "OpenShell Gateway TOML config path")
 	tlsCert := flag.String("tls-cert", "", "TLS certificate path")
 	tlsKey := flag.String("tls-key", "", "TLS private key path")
@@ -110,6 +114,45 @@ func main() {
 	oauthClientID := flag.String("oauth-exchange-client-id", os.Getenv("QUARSHELL_OAUTH_CLIENT_ID"), "OAuth client ID")
 	oauthClientSecret := flag.String("oauth-exchange-client-secret", os.Getenv("QUARSHELL_OAUTH_CLIENT_SECRET"), "OAuth client secret")
 	flag.Parse()
+	if *replicaRefreshInterval <= 0 {
+		log.Fatal("replica discovery interval must be positive")
+	}
+	var replicaRing *applicationgrpc.ReplicaRing
+	if strings.TrimSpace(*replicaID) != "" || strings.TrimSpace(*replicaPeers) != "" || strings.TrimSpace(*replicaSRV) != "" {
+		members := []applicationgrpc.GatewayReplica{{ID: strings.TrimSpace(*replicaID)}}
+		for _, entry := range strings.Split(*replicaPeers, ",") {
+			if strings.TrimSpace(entry) == "" {
+				continue
+			}
+			id, endpoint, ok := strings.Cut(strings.TrimSpace(entry), "=")
+			if !ok {
+				log.Fatalf("invalid --replica-peers entry %q; expected id=http(s)://host:port", entry)
+			}
+			if strings.TrimSpace(id) == strings.TrimSpace(*replicaID) {
+				members[0].Endpoint = strings.TrimSpace(endpoint)
+			} else {
+				members = append(members, applicationgrpc.GatewayReplica{ID: strings.TrimSpace(id), Endpoint: strings.TrimSpace(endpoint)})
+			}
+		}
+		var err error
+		replicaRing, err = applicationgrpc.NewReplicaRing(*replicaID, members)
+		if err != nil {
+			log.Fatalf("gateway replica membership: %v", err)
+		}
+		if strings.TrimSpace(*replicaSRV) != "" {
+			scheme := "http"
+			if *tlsCert != "" {
+				scheme = "https"
+			}
+			discovered, err := applicationgrpc.DiscoverGatewayReplicas(context.Background(), *replicaSRV, scheme, *replicaID)
+			if err != nil {
+				log.Fatalf("initial Gateway replica discovery: %v", err)
+			}
+			if err := replicaRing.UpdateReplicas(discovered); err != nil {
+				log.Fatalf("initial Gateway replica membership: %v", err)
+			}
+		}
+	}
 	explicit := map[string]bool{}
 	flag.Visit(func(value *flag.Flag) { explicit[value.Name] = true })
 	runtimeExplicit := explicit["runtime"]
@@ -165,6 +208,31 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if replicaRing != nil && strings.TrimSpace(*replicaSRV) != "" {
+		go func() {
+			ticker := time.NewTicker(*replicaRefreshInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					scheme := "http"
+					if *tlsCert != "" {
+						scheme = "https"
+					}
+					replicas, err := applicationgrpc.DiscoverGatewayReplicas(ctx, *replicaSRV, scheme, *replicaID)
+					if err != nil {
+						log.Printf("quarshell-gateway: refresh replica discovery: %v", err)
+						continue
+					}
+					if err := replicaRing.UpdateReplicas(replicas); err != nil {
+						log.Printf("quarshell-gateway: update replica ring: %v", err)
+					}
+				}
+			}
+		}()
+	}
 
 	var store lifecycle.Store
 	var closer func() error
@@ -322,6 +390,7 @@ func main() {
 	}
 	log.Printf("quarshell-gateway listening on %s", listener.Addr())
 	var grpcServer *grpc.Server
+	var grpcApplication *applicationgrpc.Server
 	if strings.TrimSpace(*grpcListen) != "" {
 		grpcListener, err := net.Listen("tcp", *grpcListen)
 		if err != nil {
@@ -342,7 +411,8 @@ func main() {
 			options = append(options, grpc.Creds(grpcCredentials.NewTLS(tlsConfig)))
 		}
 		grpcServer = grpc.NewServer(options...)
-		grpcApplication := applicationgrpc.New(gatewayVersion, workspaces, sandboxes, chunks, templates, settingsService, providerDefs, services)
+		grpcApplication = applicationgrpc.New(gatewayVersion, workspaces, sandboxes, chunks, templates, settingsService, providerDefs, services)
+		grpcApplication.ReplicaRouting = replicaRing
 		grpcApplication.SupervisorHub = supervisorHub
 		grpcApplication.SandboxLogs = sandboxLogStore
 		grpcApplication.Tokens = tokens
@@ -384,6 +454,9 @@ func main() {
 	}
 	go func() {
 		<-ctx.Done()
+		if grpcApplication != nil {
+			grpcApplication.BeginDrain()
+		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)

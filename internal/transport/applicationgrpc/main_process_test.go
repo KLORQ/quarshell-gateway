@@ -170,7 +170,7 @@ func TestAttachTTYStreamsCanonicalMainProcessAndExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := stream.Send(&runtimev1.MainProcessServiceAttachTTYRequest{Payload: &runtimev1.MainProcessServiceAttachTTYRequest_Start{Start: &runtimev1.MainProcessTTYStart{Workspace: "team", Sandbox: "agent", Cols: 80, Rows: 24}}}); err != nil {
+	if err := stream.Send(&runtimev1.MainProcessServiceAttachTTYRequest{Payload: &runtimev1.MainProcessServiceAttachTTYRequest_Start{Start: &runtimev1.MainProcessTTYStart{Workspace: "team", Sandbox: "agent", Cols: 80, Rows: 24, ReaderId: "b8215ac4-3851-49f9-a826-97b7a910be67"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := stream.Send(&runtimev1.MainProcessServiceAttachTTYRequest{Payload: &runtimev1.MainProcessServiceAttachTTYRequest_Stdin{Stdin: []byte("hello\n")}}); err != nil {

@@ -88,6 +88,17 @@ func (d *Docker) PTY(ctx context.Context, sandbox Sandbox, columns, rows uint32)
 	return terminal.OpenMainProcessTTY(ctx, id(sandbox), columns, rows)
 }
 
+func (d *Docker) PTYFromCursor(ctx context.Context, sandbox Sandbox, columns, rows uint32, cursor uint64) (io.ReadWriteCloser, error) {
+	terminal, ok := d.Backend.(driver.MainProcessTTYCursorAttacher)
+	if !ok {
+		if cursor == 0 {
+			return d.PTY(ctx, sandbox, columns, rows)
+		}
+		return nil, domain.New(domain.CodeUnavailable, "sandboxruntime.pty.attach", "backend does not support cursor-aware PTY attachment")
+	}
+	return terminal.OpenMainProcessTTYFromCursor(ctx, id(sandbox), columns, rows, cursor)
+}
+
 // ResizePTY changes the size of the canonical main-process PTY.
 func (d *Docker) ResizePTY(ctx context.Context, sandbox Sandbox, columns, rows uint32) error {
 	terminal, ok := d.Backend.(driver.MainProcessTTY)
@@ -107,6 +118,17 @@ func (d *Docker) MainProcessStream(ctx context.Context, sandbox Sandbox) (driver
 	return stream.OpenMainProcessStream(ctx, id(sandbox))
 }
 
+func (d *Docker) MainProcessStreamFromCursor(ctx context.Context, sandbox Sandbox, cursor uint64) (driver.ExecStreamSession, error) {
+	stream, ok := d.Backend.(driver.MainProcessStreamCursorAttacher)
+	if !ok {
+		if cursor == 0 {
+			return d.MainProcessStream(ctx, sandbox)
+		}
+		return nil, domain.New(domain.CodeUnavailable, "sandboxruntime.main_process.stream", "backend does not support cursor-aware output attachment")
+	}
+	return stream.OpenMainProcessStreamFromCursor(ctx, id(sandbox), cursor)
+}
+
 // WaitMainProcess returns the canonical process exit status.
 func (d *Docker) WaitMainProcess(ctx context.Context, sandbox Sandbox) (int, error) {
 	waiter, ok := d.Backend.(driver.MainProcessWaiter)
@@ -114,6 +136,16 @@ func (d *Docker) WaitMainProcess(ctx context.Context, sandbox Sandbox) (int, err
 		return 0, domain.New(domain.CodeUnavailable, "sandboxruntime.main_process.wait", "backend cannot observe main-process exit")
 	}
 	return waiter.WaitMainProcess(ctx, id(sandbox))
+}
+
+// RecordMainProcessExit forwards the authenticated supervisor result to
+// backends that keep their own durable workload state (for example, a VM).
+func (d *Docker) RecordMainProcessExit(ctx context.Context, sandbox Sandbox, instanceID string, exitCode int32) error {
+	recorder, ok := d.Backend.(driver.MainProcessExitRecorder)
+	if !ok {
+		return nil
+	}
+	return recorder.RecordMainProcessExit(ctx, id(sandbox), instanceID, exitCode)
 }
 
 // SignalMainProcess delivers an allowlisted signal to the canonical workload.
@@ -198,6 +230,17 @@ func (d *Docker) AttachExecTerminal(ctx context.Context, sandbox Sandbox, sessio
 	return executor.AttachExecTerminal(ctx, id(sandbox), sessionID)
 }
 
+func (d *Docker) AttachExecTerminalFromCursor(ctx context.Context, sandbox Sandbox, sessionID string, cursor uint64) (driver.ExecTerminalSession, error) {
+	executor, ok := d.Backend.(driver.ExecTerminalCursorAttacher)
+	if !ok {
+		if cursor == 0 {
+			return d.AttachExecTerminal(ctx, sandbox, sessionID)
+		}
+		return nil, fmt.Errorf("runtime driver does not support cursor-aware terminal attachment")
+	}
+	return executor.AttachExecTerminalFromCursor(ctx, id(sandbox), sessionID, cursor)
+}
+
 // OpenExecStream starts a non-TTY interactive process with separate output streams.
 func (d *Docker) OpenExecStream(ctx context.Context, sandbox Sandbox, request driver.ExecTerminalRequest) (driver.ExecStreamSession, error) {
 	executor, ok := d.Backend.(driver.InteractiveExecStream)
@@ -205,6 +248,26 @@ func (d *Docker) OpenExecStream(ctx context.Context, sandbox Sandbox, request dr
 		return nil, domain.New(domain.CodeUnavailable, "sandboxruntime.exec_stream", "backend does not support interactive non-TTY execution")
 	}
 	return executor.OpenExecStream(ctx, id(sandbox), request)
+}
+
+// AttachExecStream reconnects to a retained non-TTY process.
+func (d *Docker) AttachExecStream(ctx context.Context, sandbox Sandbox, sessionID string) (driver.ExecStreamSession, error) {
+	executor, ok := d.Backend.(driver.ExecStreamAttach)
+	if !ok {
+		return nil, domain.New(domain.CodeUnavailable, "sandboxruntime.exec_stream.attach", "backend does not support exec stream attachment")
+	}
+	return executor.AttachExecStream(ctx, id(sandbox), sessionID)
+}
+
+func (d *Docker) AttachExecStreamFromCursor(ctx context.Context, sandbox Sandbox, sessionID string, cursor uint64) (driver.ExecStreamSession, error) {
+	executor, ok := d.Backend.(driver.ExecStreamCursorAttacher)
+	if !ok {
+		if cursor == 0 {
+			return d.AttachExecStream(ctx, sandbox, sessionID)
+		}
+		return nil, fmt.Errorf("runtime driver does not support cursor-aware exec stream attachment")
+	}
+	return executor.AttachExecStreamFromCursor(ctx, id(sandbox), sessionID, cursor)
 }
 
 // Inspect returns backend state for reconciliation.

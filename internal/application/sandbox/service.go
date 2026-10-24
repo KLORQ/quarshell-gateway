@@ -314,6 +314,24 @@ func (s *Service) AttachExecTerminal(ctx context.Context, ref domain.SandboxRef,
 	return executor.AttachExecTerminal(ctx, runtimeInput(current), sessionID)
 }
 
+// AttachExecTerminalFromCursor resumes a retained PTY after a durable output cursor.
+func (s *Service) AttachExecTerminalFromCursor(ctx context.Context, ref domain.SandboxRef, sessionID string, cursor uint64) (driver.ExecTerminalSession, error) {
+	current, err := s.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	executor, ok := s.Runtime.(interface {
+		AttachExecTerminalFromCursor(context.Context, sandboxruntime.Sandbox, string, uint64) (driver.ExecTerminalSession, error)
+	})
+	if !ok {
+		if cursor == 0 {
+			return s.AttachExecTerminal(ctx, ref, sessionID)
+		}
+		return nil, domain.New(domain.CodeUnavailable, "sandbox.exec_terminal.attach", "runtime does not support cursor-aware terminal attachment")
+	}
+	return executor.AttachExecTerminalFromCursor(ctx, runtimeInput(current), sessionID, cursor)
+}
+
 // OpenExecStream opens a non-TTY interactive command in the current generation.
 func (s *Service) OpenExecStream(ctx context.Context, ref domain.SandboxRef, request driver.ExecTerminalRequest) (driver.ExecStreamSession, error) {
 	current, err := s.Get(ctx, ref)
@@ -327,6 +345,40 @@ func (s *Service) OpenExecStream(ctx context.Context, ref domain.SandboxRef, req
 		return nil, domain.New(domain.CodeUnavailable, "sandbox.exec_stream", "runtime does not support interactive non-TTY execution")
 	}
 	return executor.OpenExecStream(ctx, runtimeInput(current), request)
+}
+
+// AttachExecStream reconnects to an existing non-TTY process in the current generation.
+func (s *Service) AttachExecStream(ctx context.Context, ref domain.SandboxRef, sessionID string) (driver.ExecStreamSession, error) {
+	current, err := s.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	executor, ok := s.Runtime.(interface {
+		AttachExecStream(context.Context, sandboxruntime.Sandbox, string) (driver.ExecStreamSession, error)
+	})
+	if !ok {
+		return nil, domain.New(domain.CodeUnavailable, "sandbox.exec_stream.attach", "runtime does not support exec stream attachment")
+	}
+	return executor.AttachExecStream(ctx, runtimeInput(current), sessionID)
+}
+
+// AttachExecStreamFromCursor resumes a retained stream after a durable output
+// cursor when the runtime supports cursor-aware attachments.
+func (s *Service) AttachExecStreamFromCursor(ctx context.Context, ref domain.SandboxRef, sessionID string, cursor uint64) (driver.ExecStreamSession, error) {
+	current, err := s.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	executor, ok := s.Runtime.(interface {
+		AttachExecStreamFromCursor(context.Context, sandboxruntime.Sandbox, string, uint64) (driver.ExecStreamSession, error)
+	})
+	if !ok {
+		if cursor == 0 {
+			return s.AttachExecStream(ctx, ref, sessionID)
+		}
+		return nil, domain.New(domain.CodeUnavailable, "sandbox.exec_stream.attach", "runtime does not support cursor-aware exec stream attachment")
+	}
+	return executor.AttachExecStreamFromCursor(ctx, runtimeInput(current), sessionID, cursor)
 }
 
 // OpenMainProcessTTY attaches to the canonical workload PTY.
@@ -344,6 +396,24 @@ func (s *Service) OpenMainProcessTTY(ctx context.Context, ref domain.SandboxRef,
 	return pty.PTY(ctx, runtimeInput(current), columns, rows)
 }
 
+// OpenMainProcessTTYFromCursor attaches to canonical PTY output at a reader cursor.
+func (s *Service) OpenMainProcessTTYFromCursor(ctx context.Context, ref domain.SandboxRef, columns, rows uint32, cursor uint64) (io.ReadWriteCloser, error) {
+	current, err := s.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	pty, ok := s.Runtime.(interface {
+		PTYFromCursor(context.Context, sandboxruntime.Sandbox, uint32, uint32, uint64) (io.ReadWriteCloser, error)
+	})
+	if !ok {
+		if cursor == 0 {
+			return s.OpenMainProcessTTY(ctx, ref, columns, rows)
+		}
+		return nil, domain.New(domain.CodeUnavailable, "sandbox.main_process.pty", "runtime does not support cursor-aware PTY attachment")
+	}
+	return pty.PTYFromCursor(ctx, runtimeInput(current), columns, rows, cursor)
+}
+
 // OpenMainProcessStream attaches to the retained stdout/stderr/stdin pipes of
 // a canonical workload started without a TTY.
 func (s *Service) OpenMainProcessStream(ctx context.Context, ref domain.SandboxRef) (driver.ExecStreamSession, error) {
@@ -358,6 +428,24 @@ func (s *Service) OpenMainProcessStream(ctx context.Context, ref domain.SandboxR
 		return nil, domain.New(domain.CodeUnavailable, "sandbox.main_process.stream", "runtime does not support retained non-TTY process attachment")
 	}
 	return streamer.MainProcessStream(ctx, runtimeInput(current))
+}
+
+// OpenMainProcessStreamFromCursor attaches to canonical non-TTY output at a reader cursor.
+func (s *Service) OpenMainProcessStreamFromCursor(ctx context.Context, ref domain.SandboxRef, cursor uint64) (driver.ExecStreamSession, error) {
+	current, err := s.Get(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	streamer, ok := s.Runtime.(interface {
+		MainProcessStreamFromCursor(context.Context, sandboxruntime.Sandbox, uint64) (driver.ExecStreamSession, error)
+	})
+	if !ok {
+		if cursor == 0 {
+			return s.OpenMainProcessStream(ctx, ref)
+		}
+		return nil, domain.New(domain.CodeUnavailable, "sandbox.main_process.stream", "runtime does not support cursor-aware output attachment")
+	}
+	return streamer.MainProcessStreamFromCursor(ctx, runtimeInput(current), cursor)
 }
 
 // ResizeMainProcessTTY resizes the canonical workload PTY.
@@ -736,7 +824,14 @@ func (s *Service) RecordMainProcessExit(ctx context.Context, ref domain.SandboxR
 	if !ref.Valid() || generation == 0 || strings.TrimSpace(instanceID) == "" {
 		return domain.Invalidf("sandbox.process_exit", "sandbox, runtime generation and instance ID are required")
 	}
-	return s.updateProcessExit(ctx, ref, generation, instanceID, func(current *Sandbox) error {
+	current, err := s.Get(ctx, ref)
+	if err != nil {
+		return err
+	}
+	if current.RuntimeGenerationOrInitial() != generation {
+		return domain.New(domain.CodeConflict, "sandbox.process_exit", "runtime generation is stale")
+	}
+	if err := s.updateProcessExit(ctx, ref, generation, instanceID, func(current *Sandbox) error {
 		if current.MainProcessExitCode != nil {
 			return nil
 		}
@@ -752,7 +847,24 @@ func (s *Service) RecordMainProcessExit(ctx context.Context, ref domain.SandboxR
 			current.State = "error"
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	current, err = s.Get(ctx, ref)
+	if err != nil {
+		return err
+	}
+	// Persist to Gateway first, then forward the same idempotent report to a
+	// backend that needs it to resolve its local WaitMainProcess call.
+	if recorder, ok := s.Runtime.(interface {
+		RecordMainProcessExit(context.Context, sandboxruntime.Sandbox, string, int32) error
+	}); ok {
+		if current.MainProcessExitCode == nil {
+			return domain.New(domain.CodeConflict, "sandbox.process_exit", "durable main-process exit is missing")
+		}
+		return recorder.RecordMainProcessExit(ctx, runtimeInput(current), current.MainProcessInstanceID, *current.MainProcessExitCode)
+	}
+	return nil
 }
 
 // FinalizeMainProcessExit marks terminal delivery complete after the exit

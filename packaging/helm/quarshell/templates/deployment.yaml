@@ -1,3 +1,11 @@
+{{- if gt (int .Values.replicaCount) 1 }}
+{{- if not .Values.database.existingSecret }}
+{{- fail "replicaCount > 1 requires database.existingSecret pointing to a shared PostgreSQL URI Secret" }}
+{{- end }}
+{{- if .Values.persistence.enabled }}
+{{- fail "replicaCount > 1 requires persistence.enabled=false; per-replica state must use the shared database" }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,6 +36,12 @@ spec:
             - 0.0.0.0
             - --port
             - {{ .Values.service.port | quote }}
+            - --grpc-listen
+            - 0.0.0.0:{{ .Values.grpc.port }}
+            {{- if .Values.replicaRouting.enabled }}
+            - --replica-discovery-interval
+            - {{ .Values.replicaRouting.discoveryInterval | quote }}
+            {{- end }}
             {{- if .Values.oidc.enabled }}
             - --oidc-issuer
             - {{ .Values.oidc.issuer | quote }}
@@ -46,7 +60,17 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
+            - name: grpc
+              containerPort: {{ .Values.grpc.port }}
           env:
+            {{- if .Values.replicaRouting.enabled }}
+            - name: QUARSHELL_GATEWAY_REPLICA_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: QUARSHELL_GATEWAY_REPLICA_DISCOVERY_SRV
+              value: "_grpc._tcp.{{ include "quarshell.fullname" . }}-headless.{{ .Release.Namespace }}.svc"
+            {{- end }}
             - name: XDG_STATE_HOME
               value: /var/lib
             - name: QUARSHELL_SUPERVISOR_TOPOLOGY

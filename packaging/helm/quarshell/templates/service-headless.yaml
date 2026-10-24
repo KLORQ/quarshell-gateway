@@ -1,0 +1,19 @@
+{{- if .Values.replicaRouting.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "quarshell.fullname" . }}-headless
+  labels:
+    {{- include "quarshell.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: grpc
+      port: {{ .Values.grpc.port }}
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: {{ include "quarshell.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

@@ -12,6 +12,13 @@ service:
   type: ClusterIP
   port: 7443
 
+grpc:
+  port: 7444
+
+replicaRouting:
+  enabled: true
+  discoveryInterval: 5s
+
 persistence:
   enabled: true
   size: 1Gi

@@ -156,15 +156,16 @@ func (s *Server) ExecSandboxInteractive(stream gatewayv1.OpenShell_ExecSandboxIn
 	}
 	ref := sandboxRef(request.GetWorkspaceScope(), request.GetSandbox())
 	var attachSessionID string
+	var attachCursor uint64
 	if err := s.admitExecRequest(ctx, ref, request.GetRequestId(), request); err != nil {
-		if !request.GetTty() || request.GetRequestId() == "" || status.Code(err) != codes.Aborted {
+		if request.GetRequestId() == "" || status.Code(err) != codes.Aborted {
 			return err
 		}
 		requestHash, hashErr := execRequestHash(request)
 		if hashErr != nil {
 			return status.Error(codes.Internal, "encode exec request admission")
 		}
-		sessionID, found, lookupErr := s.Sandboxes.ExecTerminalSessionID(ctx, ref, request.GetRequestId(), requestHash)
+		sessionID, cursor, found, lookupErr := s.Sandboxes.ExecSessionCheckpoint(ctx, ref, request.GetRequestId(), requestHash)
 		if lookupErr != nil {
 			return grpcError(lookupErr)
 		}
@@ -172,13 +173,14 @@ func (s *Server) ExecSandboxInteractive(stream gatewayv1.OpenShell_ExecSandboxIn
 			return err
 		}
 		attachSessionID = sessionID
+		attachCursor = cursor
 	}
 	if !request.GetTty() {
-		return s.execSandboxInteractiveStream(ctx, ref, request, environment, stream)
+		return s.execSandboxInteractiveStream(ctx, ref, request, environment, attachSessionID, attachCursor, stream)
 	}
 	var session driver.ExecTerminalSession
 	if attachSessionID != "" {
-		session, err = s.Sandboxes.AttachExecTerminal(ctx, ref, attachSessionID)
+		session, err = s.Sandboxes.AttachExecTerminalFromCursor(ctx, ref, attachSessionID, attachCursor)
 	} else {
 		session, err = s.Sandboxes.OpenExecTerminal(ctx, ref, driver.ExecTerminalRequest{
 			Argv: append([]string(nil), request.GetCommand()...), Env: environment,
@@ -191,7 +193,7 @@ func (s *Server) ExecSandboxInteractive(stream gatewayv1.OpenShell_ExecSandboxIn
 					_ = session.Close()
 					return status.Error(codes.Internal, "encode exec request admission")
 				}
-				if saveErr := s.Sandboxes.SetExecTerminalSessionID(ctx, ref, request.GetRequestId(), requestHash, identified.SessionID()); saveErr != nil {
+				if saveErr := s.Sandboxes.SetExecSessionID(ctx, ref, request.GetRequestId(), requestHash, identified.SessionID()); saveErr != nil {
 					_ = session.Close()
 					return grpcError(saveErr)
 				}
@@ -254,10 +256,28 @@ func (s *Server) ExecSandboxInteractive(stream gatewayv1.OpenShell_ExecSandboxIn
 	}()
 	buffer := make([]byte, execOutputChunkBytes)
 	for {
-		count, readErr := session.Read(buffer)
-		if count > 0 {
-			if err := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stdout{Stdout: &gatewayv1.ExecSandboxStdout{Data: append([]byte(nil), buffer[:count]...)}}}); err != nil {
+		var output []byte
+		var cursor uint64
+		var readErr error
+		if reader, ok := session.(driver.ExecTerminalOutputReader); ok {
+			output, cursor, readErr = reader.ReadOutput()
+		} else {
+			var count int
+			count, readErr = session.Read(buffer)
+			output = buffer[:count]
+		}
+		if len(output) > 0 {
+			if err := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stdout{Stdout: &gatewayv1.ExecSandboxStdout{Data: append([]byte(nil), output...)}}}); err != nil {
 				return err
+			}
+			if cursor > 0 && request.GetRequestId() != "" {
+				requestHash, hashErr := execRequestHash(request)
+				if hashErr != nil {
+					return status.Error(codes.Internal, "encode exec request admission")
+				}
+				if err := s.Sandboxes.SetExecSessionCursor(ctx, ref, request.GetRequestId(), requestHash, cursor); err != nil {
+					return grpcError(err)
+				}
 			}
 		}
 		if readErr == io.EOF {
@@ -292,8 +312,14 @@ type mainProcessTTYStream interface {
 	Recv() (*gatewayv1.ExecSandboxInput, error)
 }
 
-func (s *Server) attachMainProcessTTY(ctx context.Context, ref domain.SandboxRef, columns, rows uint32, stream mainProcessTTYStream) error {
-	terminal, err := s.Sandboxes.OpenMainProcessTTY(ctx, ref, columns, rows)
+func (s *Server) attachMainProcessTTY(ctx context.Context, ref domain.SandboxRef, columns, rows uint32, readerID, readerHash string, cursor uint64, stream mainProcessTTYStream) error {
+	var terminal io.ReadWriteCloser
+	var err error
+	if readerID != "" {
+		terminal, err = s.Sandboxes.OpenMainProcessTTYFromCursor(ctx, ref, columns, rows, cursor)
+	} else {
+		terminal, err = s.Sandboxes.OpenMainProcessTTY(ctx, ref, columns, rows)
+	}
 	if err != nil {
 		return grpcError(err)
 	}
@@ -337,10 +363,24 @@ func (s *Server) attachMainProcessTTY(ctx context.Context, ref domain.SandboxRef
 	}()
 	buffer := make([]byte, execOutputChunkBytes)
 	for {
-		count, readErr := terminal.Read(buffer)
-		if count > 0 {
-			if sendErr := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stdout{Stdout: &gatewayv1.ExecSandboxStdout{Data: append([]byte(nil), buffer[:count]...)}}}); sendErr != nil {
+		var output []byte
+		var outputCursor uint64
+		var readErr error
+		if reader, ok := terminal.(driver.ExecTerminalOutputReader); ok {
+			output, outputCursor, readErr = reader.ReadOutput()
+		} else {
+			var count int
+			count, readErr = terminal.Read(buffer)
+			output = buffer[:count]
+		}
+		if len(output) > 0 {
+			if sendErr := stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Stdout{Stdout: &gatewayv1.ExecSandboxStdout{Data: append([]byte(nil), output...)}}}); sendErr != nil {
 				return sendErr
+			}
+			if outputCursor > 0 && readerID != "" {
+				if err := s.Sandboxes.SetOutputReaderCursor(ctx, ref, readerID, readerHash, outputCursor); err != nil {
+					return grpcError(err)
+				}
 			}
 		}
 		if readErr == io.EOF {
@@ -370,8 +410,14 @@ func (s *Server) attachMainProcessTTY(ctx context.Context, ref domain.SandboxRef
 	}
 }
 
-func (s *Server) attachMainProcessStream(ctx context.Context, ref domain.SandboxRef, stream mainProcessTTYStream) error {
-	session, err := s.Sandboxes.OpenMainProcessStream(ctx, ref)
+func (s *Server) attachMainProcessStream(ctx context.Context, ref domain.SandboxRef, readerID, readerHash string, cursor uint64, stream mainProcessTTYStream) error {
+	var session driver.ExecStreamSession
+	var err error
+	if readerID != "" {
+		session, err = s.Sandboxes.OpenMainProcessStreamFromCursor(ctx, ref, cursor)
+	} else {
+		session, err = s.Sandboxes.OpenMainProcessStream(ctx, ref)
+	}
 	if err != nil {
 		return grpcError(err)
 	}
@@ -428,14 +474,38 @@ func (s *Server) attachMainProcessStream(ctx context.Context, ref domain.Sandbox
 		if output.Exited {
 			return stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Exit{Exit: &gatewayv1.ExecSandboxExit{ExitCode: int32(output.ExitCode)}}})
 		}
+		if output.Cursor > 0 && readerID != "" {
+			if err := s.Sandboxes.SetOutputReaderCursor(ctx, ref, readerID, readerHash, output.Cursor); err != nil {
+				return grpcError(err)
+			}
+		}
 	}
 }
 
-func (s *Server) execSandboxInteractiveStream(ctx context.Context, ref domain.SandboxRef, request *gatewayv1.ExecSandboxRequest, environment []string, stream gatewayv1.OpenShell_ExecSandboxInteractiveServer) error {
-	session, err := s.Sandboxes.OpenExecStream(ctx, ref, driver.ExecTerminalRequest{
-		Argv: append([]string(nil), request.GetCommand()...), Env: environment,
-		WorkDir: request.GetWorkdir(), NoLoginShell: request.GetNoLoginShell(),
-	})
+func (s *Server) execSandboxInteractiveStream(ctx context.Context, ref domain.SandboxRef, request *gatewayv1.ExecSandboxRequest, environment []string, attachSessionID string, attachCursor uint64, stream gatewayv1.OpenShell_ExecSandboxInteractiveServer) error {
+	var session driver.ExecStreamSession
+	var err error
+	if attachSessionID != "" {
+		session, err = s.Sandboxes.AttachExecStreamFromCursor(ctx, ref, attachSessionID, attachCursor)
+	} else {
+		session, err = s.Sandboxes.OpenExecStream(ctx, ref, driver.ExecTerminalRequest{
+			Argv: append([]string(nil), request.GetCommand()...), Env: environment,
+			WorkDir: request.GetWorkdir(), NoLoginShell: request.GetNoLoginShell(),
+		})
+		if err == nil && request.GetRequestId() != "" {
+			if identified, ok := session.(driver.ExecStreamSessionID); ok && identified.SessionID() != "" {
+				requestHash, hashErr := execRequestHash(request)
+				if hashErr != nil {
+					_ = session.Close()
+					return status.Error(codes.Internal, "encode exec request admission")
+				}
+				if saveErr := s.Sandboxes.SetExecSessionID(ctx, ref, request.GetRequestId(), requestHash, identified.SessionID()); saveErr != nil {
+					_ = session.Close()
+					return grpcError(saveErr)
+				}
+			}
+		}
+	}
 	if err != nil {
 		return grpcError(err)
 	}
@@ -506,6 +576,15 @@ func (s *Server) execSandboxInteractiveStream(ctx context.Context, ref domain.Sa
 			}
 			return stream.Send(&gatewayv1.ExecSandboxEvent{Payload: &gatewayv1.ExecSandboxEvent_Exit{Exit: &gatewayv1.ExecSandboxExit{ExitCode: int32(output.ExitCode)}}})
 		}
+		if output.Cursor > 0 && request.GetRequestId() != "" {
+			requestHash, hashErr := execRequestHash(request)
+			if hashErr != nil {
+				return status.Error(codes.Internal, "encode exec request admission")
+			}
+			if err := s.Sandboxes.SetExecSessionCursor(ctx, ref, request.GetRequestId(), requestHash, output.Cursor); err != nil {
+				return grpcError(err)
+			}
+		}
 	}
 }
 
@@ -539,6 +618,11 @@ func execRequestHash(request proto.Message) (string, error) {
 	}
 	digest := sha256.Sum256(encoded)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+func canonicalMainProcessReaderHash(ref domain.SandboxRef) string {
+	digest := sha256.Sum256([]byte("canonical-main-process-reader:" + string(ref.Workspace) + ":" + string(ref.Sandbox)))
+	return hex.EncodeToString(digest[:])
 }
 
 func isNonzeroUUID(value string) bool {

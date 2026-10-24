@@ -19,6 +19,13 @@ type recordingRuntime struct {
 	created sandboxruntime.Sandbox
 	starts  int
 	stops   int
+	exits   []recordedProcessExit
+}
+
+type recordedProcessExit struct {
+	sandbox  sandboxruntime.Sandbox
+	instance string
+	exitCode int32
 }
 
 type identityRecordingRuntime struct{ recordingRuntime }
@@ -42,6 +49,10 @@ func (r *recordingRuntime) Stop(context.Context, sandboxruntime.Sandbox) error {
 func (*recordingRuntime) Delete(context.Context, sandboxruntime.Sandbox) error { return nil }
 func (*recordingRuntime) Inspect(context.Context, sandboxruntime.Sandbox) (driver.Info, error) {
 	return driver.Info{}, nil
+}
+func (r *recordingRuntime) RecordMainProcessExit(_ context.Context, sandbox sandboxruntime.Sandbox, instance string, code int32) error {
+	r.exits = append(r.exits, recordedProcessExit{sandbox: sandbox, instance: instance, exitCode: code})
+	return nil
 }
 
 type tokenRecordingRuntime struct {
@@ -456,6 +467,8 @@ func TestMainProcessExitIsDurableIdempotentAndGenerationBound(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := domain.SandboxRef{Workspace: "ws", Sandbox: "sb"}
+	runtime := &recordingRuntime{}
+	service.Runtime = runtime
 	if _, _, err := service.Create(ctx, testRequest()); err != nil {
 		t.Fatal(err)
 	}
@@ -467,11 +480,22 @@ func TestMainProcessExitIsDurableIdempotentAndGenerationBound(t *testing.T) {
 	if err := service.RecordMainProcessExit(ctx, ref, generation, "supervisor-1", 17); err != nil {
 		t.Fatal(err)
 	}
+	if len(runtime.exits) != 1 || runtime.exits[0].sandbox.Sandbox != ref.Sandbox || runtime.exits[0].instance != "supervisor-1" || runtime.exits[0].exitCode != 17 {
+		t.Fatalf("backend exit reports = %+v", runtime.exits)
+	}
 	if err := service.RecordMainProcessExit(ctx, ref, generation, "supervisor-1", 17); err != nil {
 		t.Fatalf("idempotent report: %v", err)
 	}
 	if err := service.RecordMainProcessExit(ctx, ref, generation, "supervisor-2", 0); err != nil {
 		t.Fatalf("duplicate report did not preserve first result: %v", err)
+	}
+	if len(runtime.exits) != 3 {
+		t.Fatalf("backend exit report retries = %d, want one durable delivery per supervisor report", len(runtime.exits))
+	}
+	for _, report := range runtime.exits {
+		if report.instance != "supervisor-1" || report.exitCode != 17 {
+			t.Fatalf("backend received non-canonical duplicate exit report: %+v", report)
+		}
 	}
 	current, err := service.Get(ctx, ref)
 	if err != nil || current.State != "error" || current.MainProcessExitCode == nil || *current.MainProcessExitCode != 17 || current.MainProcessFinalized {

@@ -34,6 +34,9 @@ type execTestRuntime struct {
 	streamRequest     driver.ExecTerminalRequest
 	stream            driver.ExecStreamSession
 	streamCalls       int
+	streamAttach      driver.ExecStreamSession
+	streamAttachID    string
+	streamAttachCalls int
 }
 
 type execTimeoutRuntime struct{ execTestRuntime }
@@ -67,16 +70,28 @@ func (r *execTestRuntime) OpenExecStream(_ context.Context, _ sandboxruntime.San
 	r.streamCalls++
 	return r.stream, r.err
 }
+func (r *execTestRuntime) AttachExecStream(_ context.Context, _ sandboxruntime.Sandbox, sessionID string) (driver.ExecStreamSession, error) {
+	r.streamAttachID = sessionID
+	r.streamAttachCalls++
+	return r.streamAttach, r.err
+}
 
 type execTestStreamSession struct {
 	outputs     []driver.ExecStreamOutput
 	stdin       bytes.Buffer
 	stdinClosed chan struct{}
+	sessionID   string
+	readErr     error
+	errReturned bool
 }
 
 func (s *execTestStreamSession) Write(payload []byte) (int, error) { return s.stdin.Write(payload) }
 func (s *execTestStreamSession) ReadOutput() (driver.ExecStreamOutput, error) {
 	if len(s.outputs) == 0 {
+		if s.readErr != nil && !s.errReturned {
+			s.errReturned = true
+			return driver.ExecStreamOutput{}, s.readErr
+		}
 		return driver.ExecStreamOutput{}, io.EOF
 	}
 	output := s.outputs[0]
@@ -91,7 +106,8 @@ func (s *execTestStreamSession) CloseStdin() error {
 	}
 	return nil
 }
-func (*execTestStreamSession) Close() error { return nil }
+func (*execTestStreamSession) Close() error        { return nil }
+func (s *execTestStreamSession) SessionID() string { return s.sessionID }
 
 type execTestStream struct {
 	grpc.ServerStreamingServer[gatewayv1.ExecSandboxEvent]
@@ -419,6 +435,59 @@ func TestExecSandboxInteractiveStreamsNonTTYAndFencesDuplicate(t *testing.T) {
 	}
 	if runtime.streamCalls != 1 {
 		t.Fatalf("duplicate launched another stream process; calls=%d", runtime.streamCalls)
+	}
+}
+
+func TestExecSandboxInteractiveReattachesRetainedNonTTYProcess(t *testing.T) {
+	ctx := context.Background()
+	sandboxes, err := sandbox.NewService(lifecycle.NewMemoryStore())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := sandboxes.Create(ctx, sandbox.Request{Workspace: "ws", Sandbox: "sb", Generation: 1, Image: "busybox"}); err != nil {
+		t.Fatal(err)
+	}
+	const sessionID = "0123456789abcdef0123456789abcdef"
+	first := &execTestStreamSession{
+		sessionID:   sessionID,
+		outputs:     []driver.ExecStreamOutput{{Stdout: []byte("before disconnect")}},
+		readErr:     io.ErrUnexpectedEOF,
+		stdinClosed: make(chan struct{}),
+	}
+	reattached := &execTestStreamSession{
+		sessionID: sessionID,
+		outputs: []driver.ExecStreamOutput{
+			{Stdout: []byte("retained output")},
+			{ExitCode: 7, Exited: true},
+		},
+		stdinClosed: make(chan struct{}),
+	}
+	runtime := &execTestRuntime{stream: first, streamAttach: reattached}
+	sandboxes.Runtime = runtime
+	server := New("test", nil, sandboxes, nil, nil, nil, nil, nil)
+	selector := &datamodelv1.WorkspaceSelector{Selection: &datamodelv1.WorkspaceSelector_Workspace{Workspace: "ws"}}
+	request := &gatewayv1.ExecSandboxRequest{
+		WorkspaceScope: selector, Sandbox: "sb", Command: []string{"cat"},
+		RequestId: "c32a780e-faba-4b8a-8ce9-1cf9e82d520d",
+	}
+	firstStream := &interactiveExecTestStream{ctx: ctx, inputs: make(chan *gatewayv1.ExecSandboxInput, 1)}
+	firstStream.inputs <- &gatewayv1.ExecSandboxInput{Payload: &gatewayv1.ExecSandboxInput_Start{Start: request}}
+	close(firstStream.inputs)
+	if err := server.ExecSandboxInteractive(firstStream); err == nil {
+		t.Fatal("first stream ended without reporting its transport loss")
+	}
+
+	retry := &interactiveExecTestStream{ctx: ctx, inputs: make(chan *gatewayv1.ExecSandboxInput, 1)}
+	retry.inputs <- &gatewayv1.ExecSandboxInput{Payload: &gatewayv1.ExecSandboxInput_Start{Start: request}}
+	close(retry.inputs)
+	if err := server.ExecSandboxInteractive(retry); err != nil {
+		t.Fatalf("reattach retained non-TTY process: %v", err)
+	}
+	if runtime.streamCalls != 1 || runtime.streamAttachCalls != 1 || runtime.streamAttachID != sessionID {
+		t.Fatalf("exec launches=%d attaches=%d attach ID=%q", runtime.streamCalls, runtime.streamAttachCalls, runtime.streamAttachID)
+	}
+	if len(retry.events) != 2 || string(retry.events[0].GetStdout().GetData()) != "retained output" || retry.events[1].GetExit().GetExitCode() != 7 {
+		t.Fatalf("reattached non-TTY events=%+v", retry.events)
 	}
 }
 

@@ -11,6 +11,10 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    - port: {{ .Values.grpc.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
   selector:
     app.kubernetes.io/name: {{ include "quarshell.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}

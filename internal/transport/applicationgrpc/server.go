@@ -5,6 +5,7 @@ package applicationgrpc
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	credentials "github.com/KLORQ/quarshell-gateway/credentialstore"
@@ -43,6 +44,8 @@ type Server struct {
 	SandboxLogs      *sandboxlogs.Service
 	Tokens           *tokenapp.Service
 	SupervisorHub    *sshrelay.Hub
+	ReplicaRouting   *ReplicaRing
+	draining         atomic.Bool
 	sshMu            sync.RWMutex
 	sshSessions      map[string]sshSession
 	Credentials      *providercred.Store
@@ -62,6 +65,9 @@ type Server struct {
 	logCursorEpoch   string
 	logCursorSeq     map[string]uint64
 }
+
+// BeginDrain marks this replica unavailable for new supervisor sessions.
+func (s *Server) BeginDrain() { s.draining.Store(true) }
 
 // New returns a server with explicit unimplemented gaps.
 func New(version string, workspaces *workspace.Service, sandboxes *sandbox.Service, policy *policyapp.ChunkService, templates *template.Service, settings *settings.Service, providers *provider.Registry, services *endpoint.ServiceRegistry) *Server {

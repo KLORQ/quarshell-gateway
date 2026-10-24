@@ -50,12 +50,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proto
-          ref: v0.2.6
+          ref: v0.2.7
           path: quarshell-proto
       - uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-cli
-          ref: v0.1.6
+          ref: v0.1.7
           path: quarshell-cli
       - uses: actions/checkout@v4
         with:
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-runtime
-          ref: v0.1.5
+          ref: v0.1.6
           path: quarshell-runtime
       - uses: actions/checkout@v4
         with:
@@ -75,17 +75,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.2.4
+          ref: v0.2.5
           path: quarshell-driver
       - uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver-vm
-          ref: v0.1.7
+          ref: v0.1.11
           path: quarshell-driver-vm
       - uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-sdk
-          ref: v0.1.5
+          ref: v0.1.6
           path: quarshell-sdk
 
       - name: Write go.work
