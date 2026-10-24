@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proto
-          ref: v0.2.7
+          ref: v0.2.8
           path: quarshell-proto
       - uses: actions/setup-node@v4
         with:
@@ -95,7 +95,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proto
-          ref: v0.2.7
+          ref: v0.2.8
           path: quarshell-proto
 
       - name: Checkout quarshell-cli
@@ -130,8 +130,22 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.2.5
+          ref: v0.2.10
           path: quarshell-driver
+
+      - name: Checkout quarshell-driver-vm
+        uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-driver-vm
+          ref: v0.1.12
+          path: quarshell-driver-vm
+
+      - name: Checkout quarshell-driver-vm
+        uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-driver-vm
+          ref: v0.1.12
+          path: quarshell-driver-vm
 
       - name: Checkout quarshell-proxy
         uses: actions/checkout@v4
@@ -204,7 +218,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proto
-          ref: v0.2.7
+          ref: v0.2.8
           path: quarshell-proto
 
       - name: Checkout quarshell-cli
@@ -239,8 +253,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.2.5
+          ref: v0.2.10
           path: quarshell-driver
+
+      - name: Checkout quarshell-driver-vm
+        uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-driver-vm
+          ref: v0.1.12
+          path: quarshell-driver-vm
 
       - name: Checkout quarshell-proxy
         uses: actions/checkout@v4
@@ -313,7 +334,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proto
-          ref: v0.2.7
+          ref: v0.2.8
           path: quarshell-proto
 
       - name: Checkout quarshell-cli
@@ -348,8 +369,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.2.5
+          ref: v0.2.10
           path: quarshell-driver
+
+      - name: Checkout quarshell-driver-vm
+        uses: actions/checkout@v4
+        with:
+          repository: KLORQ/quarshell-driver-vm
+          ref: v0.1.12
+          path: quarshell-driver-vm
 
       - name: Checkout quarshell-proxy
         uses: actions/checkout@v4
@@ -420,7 +448,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-proto
-          ref: v0.2.7
+          ref: v0.2.8
           path: quarshell-proto
 
       - name: Checkout quarshell-cli
@@ -455,7 +483,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: KLORQ/quarshell-driver
-          ref: v0.2.5
+          ref: v0.2.10
           path: quarshell-driver
 
       - name: Checkout quarshell-proxy
